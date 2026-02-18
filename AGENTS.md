@@ -21,6 +21,23 @@ Individual commands:
 | `npm run format`      | Auto-format via `oxfmt`                 |
 | `npm test`            | Run tests via `vitest`                  |
 
+## Manual Agent Invocation (Testing)
+
+Use this to run the built CLI agent directly:
+
+```bash
+# Rebuild dist after source changes
+npm run build
+
+# Run one prompt through the CLI agent
+echo "hello" | node dist/index.js
+```
+
+Notes:
+
+- The CLI reads config from `~/.agent/config.yaml` (or `AGENT_CONFIG_PATH`).
+- Auth resolution order is `ANTHROPIC_OAUTH_TOKEN` -> `ANTHROPIC_API_KEY` -> `~/.agent/auth.json`.
+
 ## Non-Standard Tooling
 
 - **Type checker is `tsgo`**, not `tsc`. The `@typescript/native-preview` package provides a Go-native TypeScript compiler. All `tsc` invocations are replaced with `tsgo`.
