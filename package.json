@@ -1,0 +1,48 @@
+{
+	"name": "agent",
+	"version": "0.1.0",
+	"private": true,
+	"description": "A minimal, general-purpose AI agent that runs on a dedicated VM within a Tailscale network.",
+	"license": "MIT",
+	"type": "module",
+	"main": "dist/index.js",
+	"scripts": {
+		"check": "npm-run-all --parallel tsc lint lint:format",
+		"lint": "NODE_OPTIONS='--experimental-strip-types' oxlint --type-aware",
+		"lint:fix": "NODE_OPTIONS='--experimental-strip-types' oxlint --type-aware --fix",
+		"lint:format": "oxfmt --check",
+		"format": "oxfmt",
+		"tsc": "tsgo --noEmit",
+		"test": "vitest --run",
+		"test:watch": "vitest",
+		"build": "tsgo",
+		"prepare": "husky"
+	},
+	"dependencies": {
+		"@hono/node-server": "^1.19.9",
+		"@mariozechner/pi-ai": "^0.53.0",
+		"@sinclair/typebox": "^0.34.48",
+		"croner": "^10.0.1",
+		"hono": "^4.11.10",
+		"yaml": "^2.8.2"
+	},
+	"devDependencies": {
+		"@nkzw/eslint-plugin": "^2.0.0",
+		"@nkzw/oxlint-config": "^1.0.1",
+		"@types/node": "^25.2.3",
+		"@typescript/native-preview": "^7.0.0-dev.20260218.1",
+		"eslint-plugin-no-only-tests": "^3.3.0",
+		"eslint-plugin-perfectionist": "^5.6.0",
+		"eslint-plugin-react-hooks": "^7.0.1",
+		"eslint-plugin-unused-imports": "^4.4.1",
+		"husky": "^9.1.7",
+		"npm-run-all2": "^8.0.4",
+		"oxfmt": "^0.33.0",
+		"oxlint": "^1.48.0",
+		"oxlint-tsgolint": "^0.14.0",
+		"vitest": "^4.0.18"
+	},
+	"engines": {
+		"node": ">=20"
+	}
+}
