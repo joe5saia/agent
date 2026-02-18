@@ -5,6 +5,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 ## Maintenance Updates
 
 - **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
+- **2026-02-18:** Added spec coverage for OAuth subscription credentials (`~/.agent/auth.json`) and env-first credential resolution in `docs/spec-security.md`.
 
 **Related documents:**
 
@@ -286,10 +287,43 @@ Wire everything together into a CLI script that loads config, registers tools, a
 
 ---
 
+### Task 1.10 — OAuth Credential Resolver (`auth.json`)
+
+Wire provider OAuth subscriptions into runtime model calls while preserving env-var override behavior.
+
+**Files to create:**
+
+- `src/auth/store.ts` — load/save `~/.agent/auth.json`, atomic writes, typed provider credential map
+- `src/auth/resolver.ts` — `resolveApiKey(provider, options?): Promise<string | undefined>` with env-first lookup and OAuth refresh fallback
+- `src/auth/index.ts` — public API re-export
+- `test/auth-resolver.test.ts`
+
+**Files to modify:**
+
+- `src/agent/loop.ts` — inject resolved `apiKey` into `streamSimple()` options
+- `src/index.ts` — initialize auth resolver and pass it into `agentLoop()`
+
+**Behavior:**
+
+- For provider `anthropic`, use credential priority:
+  1. `ANTHROPIC_OAUTH_TOKEN`
+  2. `ANTHROPIC_API_KEY`
+  3. OAuth credentials in `~/.agent/auth.json` (via `getOAuthApiKey()`), with persisted refresh updates
+- For providers without OAuth credentials, preserve existing env-var behavior.
+- `auth.json` read failures are non-fatal when env credentials are present.
+- `auth.json` writes use atomic temp-file + rename semantics.
+- All auth-path logs redact tokens and never include raw secrets.
+
+**Acceptance criteria:** S11.11, S11.12, S11.13
+
+**Depends on:** Task 1.8, Task 1.9
+
+---
+
 ### Phase 1 Verification
 
 ```bash
-npm test                 # All unit tests pass (tasks 1.1–1.8)
+npm test                 # All unit tests pass (tasks 1.1–1.10)
 npm run check            # Lint, format, type check pass
 ```
 

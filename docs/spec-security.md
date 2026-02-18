@@ -49,8 +49,25 @@ The blocklist uses pattern matching (not exact string match) to catch common eva
 ### 11.3 Credential Storage
 
 - API keys (for LLM providers) stored in environment variables on the VM.
+- OAuth-based subscriptions (for providers like Anthropic Claude subscriptions) are stored in `~/.agent/auth.json` as refreshable credentials.
+- At runtime, the agent resolves credentials in this order:
+  1. Explicit environment token/key for the configured provider (for Anthropic: `ANTHROPIC_OAUTH_TOKEN`, then `ANTHROPIC_API_KEY`).
+  2. OAuth credentials from `~/.agent/auth.json`, exchanged/refreshed to a provider token before a model call.
 - No credentials stored in application config files.
 - Agent never logs or outputs credentials.
+
+**`~/.agent/auth.json` format (provider-keyed):**
+
+```json
+{
+	"anthropic": {
+		"type": "oauth",
+		"...": "provider OAuth credential payload"
+	}
+}
+```
+
+When OAuth refresh returns new credentials, the file is updated atomically.
 
 ### 11.4 Log Redaction
 
@@ -73,6 +90,9 @@ All structured log output passes through a redaction layer before being written:
 - **S11.8**: JWT-like strings in tool output are redacted in debug logs.
 - **S11.9**: File tool accessing a path outside `allowed_paths` returns an error.
 - **S11.10**: Blocklist catches `rm -rf /*` variant (not just `rm -rf /`).
+- **S11.11**: If `ANTHROPIC_OAUTH_TOKEN` is set, it is used instead of `auth.json`.
+- **S11.12**: If no env token/key exists and `auth.json` has provider OAuth credentials, the agent refreshes and uses that token.
+- **S11.13**: Refreshed OAuth credentials are persisted via atomic write and never logged in plaintext.
 
 ---
 
@@ -85,6 +105,7 @@ All state is file-based. No database required.
 ```
 ~/.agent/
 ├── config.yaml              # Global configuration (model defaults, etc.)
+├── auth.json                # OAuth credentials (provider keyed, optional)
 ├── tools.yaml               # CLI tool definitions
 ├── cron/
 │   └── jobs.yaml            # Cron job definitions
