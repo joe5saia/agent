@@ -1,0 +1,150 @@
+:root {
+	--bg: #f5efe5;
+	--panel: #fff8ef;
+	--ink: #1f1c16;
+	--accent: #0f6d5c;
+	--muted: #8f8577;
+	--line: #e6dbc7;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+	background: radial-gradient(circle at top left, #fff7e8 0%, var(--bg) 60%);
+	color: var(--ink);
+}
+
+.layout {
+	display: grid;
+	grid-template-columns: 280px 1fr;
+	min-height: 100vh;
+}
+
+.sidebar {
+	background: var(--panel);
+	border-right: 1px solid var(--line);
+	padding: 16px;
+}
+
+.sidebar-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.sidebar h1 {
+	font-size: 1rem;
+	margin: 0;
+}
+
+#session-list {
+	list-style: none;
+	padding: 0;
+	margin: 16px 0 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.session-item {
+	border: 1px solid var(--line);
+	border-radius: 10px;
+	padding: 10px;
+	cursor: pointer;
+	background: white;
+}
+
+.session-item.active {
+	border-color: var(--accent);
+}
+
+.chat {
+	display: grid;
+	grid-template-rows: 1fr auto;
+}
+
+.messages {
+	padding: 20px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.message {
+	padding: 10px 12px;
+	border-radius: 12px;
+	max-width: 80%;
+	white-space: pre-wrap;
+}
+
+.message.user {
+	align-self: flex-end;
+	background: #d5f3eb;
+}
+
+.message.assistant {
+	align-self: flex-start;
+	background: #ffffff;
+	border: 1px solid var(--line);
+}
+
+.message.meta {
+	align-self: center;
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.composer {
+	padding: 16px;
+	border-top: 1px solid var(--line);
+	background: var(--panel);
+}
+
+textarea {
+	width: 100%;
+	resize: vertical;
+	font: inherit;
+	padding: 10px;
+	border: 1px solid var(--line);
+	border-radius: 8px;
+}
+
+.actions {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+button {
+	font: inherit;
+	padding: 8px 12px;
+	border-radius: 8px;
+	border: 1px solid var(--line);
+	background: white;
+	cursor: pointer;
+}
+
+#send {
+	background: var(--accent);
+	border-color: var(--accent);
+	color: white;
+}
+
+@media (max-width: 768px) {
+	.layout {
+		grid-template-columns: 1fr;
+		grid-template-rows: auto 1fr;
+	}
+
+	.sidebar {
+		border-right: 0;
+		border-bottom: 1px solid var(--line);
+	}
+}

@@ -9,4 +9,9 @@ export type {
 	SessionMetadata,
 	SessionRecord,
 } from "./types.js";
-export type { AppendMessageInput, CreateSessionOptions, SessionManagerOptions } from "./manager.js";
+export type {
+	AppendMessageInput,
+	CreateSessionOptions,
+	GenerateTitleOptions,
+	SessionManagerOptions,
+} from "./manager.js";

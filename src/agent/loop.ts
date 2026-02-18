@@ -2,6 +2,7 @@ import { streamSimple } from "@mariozechner/pi-ai";
 import type { Api, Message, Model } from "@mariozechner/pi-ai";
 import { executeTool } from "../tools/index.js";
 import type { ToolRegistry } from "../tools/index.js";
+import { withRetry } from "./retry.js";
 import type { AgentEvent, AgentLoopConfig } from "./types.js";
 
 /**
@@ -25,6 +26,13 @@ export async function agentLoop(
 	while (iterations < config.maxIterations) {
 		signal?.throwIfAborted();
 		iterations += 1;
+		const turnStart = Date.now();
+		config.logger?.info("turn_start", {
+			iteration: iterations,
+			model: model.id,
+			runId: config.runId,
+			sessionId: config.sessionId,
+		});
 		const apiKey = await config.apiKeyResolver?.(model.provider);
 		const streamOptions: { apiKey?: string; signal?: AbortSignal } = {};
 		if (apiKey !== undefined) {
@@ -34,15 +42,33 @@ export async function agentLoop(
 			streamOptions.signal = signal;
 		}
 
-		const response = streamFactory(
-			model,
-			{
-				messages,
-				systemPrompt,
-				tools: tools.toToolSchemas(),
-			},
-			Object.keys(streamOptions).length > 0 ? streamOptions : undefined,
-		);
+		const responseFactory = async (): Promise<
+			ReturnType<NonNullable<AgentLoopConfig["streamFactory"]>>
+		> =>
+			streamFactory(
+				model,
+				{
+					messages,
+					systemPrompt,
+					tools: tools.toToolSchemas(),
+				},
+				Object.keys(streamOptions).length > 0 ? streamOptions : undefined,
+			);
+		const response =
+			config.retry === undefined
+				? await responseFactory()
+				: await withRetry(responseFactory, config.retry, signal, (status) => {
+						config.onStatus?.(status);
+						onEvent?.({ status, type: "status" });
+						config.logger?.info("provider_retry", {
+							attempt: status.attempt,
+							delayMs: status.delayMs,
+							model: model.id,
+							runId: config.runId,
+							sessionId: config.sessionId,
+							status: status.status,
+						});
+					});
 
 		for await (const event of response) {
 			onEvent?.({ event, type: "stream" });
@@ -52,6 +78,16 @@ export async function agentLoop(
 		messages.push(assistantMessage);
 
 		if (assistantMessage.stopReason !== "toolUse") {
+			config.logger?.info("turn_end", {
+				durationMs: Date.now() - turnStart,
+				iteration: iterations,
+				model: model.id,
+				outputTokens: assistantMessage.usage.output,
+				runId: config.runId,
+				sessionId: config.sessionId,
+				stopReason: assistantMessage.stopReason,
+				totalTokens: assistantMessage.usage.totalTokens,
+			});
 			return messages;
 		}
 
@@ -60,7 +96,14 @@ export async function agentLoop(
 				continue;
 			}
 			signal?.throwIfAborted();
+			const toolStart = Date.now();
 
+			config.logger?.info("tool_call", {
+				args: block.arguments,
+				runId: config.runId,
+				sessionId: config.sessionId,
+				toolName: block.name,
+			});
 			let executionResult = await executeTool(tools, block.name, block.arguments, signal);
 			if (executionResult.isError === false) {
 				executionResult = {
@@ -79,7 +122,48 @@ export async function agentLoop(
 			};
 			messages.push(toolResultMessage);
 			onEvent?.({ toolResult: toolResultMessage, type: "toolResult" });
+			const durationMs = Date.now() - toolStart;
+			if (executionResult.content.includes("[output truncated]")) {
+				config.logger?.warn("tool_output_truncated", {
+					durationMs,
+					runId: config.runId,
+					sessionId: config.sessionId,
+					toolName: block.name,
+				});
+			}
+			if (executionResult.isError && /blocked/i.test(executionResult.content)) {
+				config.logger?.warn("tool_blocked", {
+					durationMs,
+					reason: executionResult.content,
+					runId: config.runId,
+					sessionId: config.sessionId,
+					toolName: block.name,
+				});
+			}
+			if (executionResult.isError && /timed out/i.test(executionResult.content)) {
+				config.logger?.warn("tool_timeout", {
+					durationMs,
+					runId: config.runId,
+					sessionId: config.sessionId,
+					toolName: block.name,
+				});
+			}
+			config.logger?.info("tool_result", {
+				durationMs,
+				isError: executionResult.isError,
+				runId: config.runId,
+				sessionId: config.sessionId,
+				toolName: block.name,
+			});
 		}
+		config.logger?.info("turn_end", {
+			durationMs: Date.now() - turnStart,
+			iteration: iterations,
+			model: model.id,
+			runId: config.runId,
+			sessionId: config.sessionId,
+			stopReason: assistantMessage.stopReason,
+		});
 	}
 
 	messages.push({
@@ -106,5 +190,12 @@ export async function agentLoop(
 		},
 	});
 	onEvent?.({ message: "Maximum iteration limit reached", type: "error" });
+	config.logger?.warn("turn_end", {
+		iteration: iterations,
+		message: "Maximum iteration limit reached",
+		model: model.id,
+		runId: config.runId,
+		sessionId: config.sessionId,
+	});
 	return messages;
 }

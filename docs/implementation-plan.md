@@ -6,6 +6,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 - **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
 - **2026-02-18:** Added spec coverage for OAuth subscription credentials (`~/.agent/auth.json`) and env-first credential resolution in `docs/spec-security.md`.
+- **2026-02-18:** Completed Phase 2 web interface delivery (`src/server/*`, `public/*`, retry integration, websocket streaming, session naming, and related tests). Verification: `npm test` and `npm run check`.
 
 **Related documents:**
 
@@ -349,6 +350,8 @@ No circular dependencies exist.
 
 Build the HTTP server with static file serving and the REST API skeleton.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/server/app.ts` — Hono app setup, static file middleware, health endpoint
@@ -374,6 +377,8 @@ Build the HTTP server with static file serving and the REST API skeleton.
 
 Build the REST endpoints for session CRUD.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/server/routes/sessions.ts` — route handlers for `GET /api/sessions`, `POST /api/sessions`, `GET /api/sessions/:id`, `DELETE /api/sessions/:id`
@@ -397,6 +402,8 @@ Build the REST endpoints for session CRUD.
 ### Task 2.3 — WebSocket Handler
 
 Build the WebSocket endpoint for real-time agent streaming.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -424,6 +431,8 @@ Build the WebSocket endpoint for real-time agent streaming.
 
 Build automatic session title generation.
 
+**Status:** Completed (2026-02-18)
+
 **Files to modify:**
 
 - `src/sessions/manager.ts` — add `generateTitle()` method
@@ -449,6 +458,8 @@ Build automatic session title generation.
 ### Task 2.5 — Error Handling & Retry
 
 Build the provider retry strategy and error surfacing through WebSocket.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -480,6 +491,8 @@ Build the provider retry strategy and error surfacing through WebSocket.
 
 Add structured logging for HTTP requests, WebSocket connections, and agent loop events.
 
+**Status:** Completed (2026-02-18)
+
 **Files to modify:**
 
 - `src/server/app.ts` — add request logging middleware (method, path, status, duration)
@@ -506,6 +519,8 @@ Add structured logging for HTTP requests, WebSocket connections, and agent loop 
 
 Build a minimal web-based chat interface.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `public/index.html` — chat layout with sidebar (session list) and main panel (message thread, input)
@@ -531,6 +546,8 @@ Build a minimal web-based chat interface.
 ### Task 2.8 — Server Graceful Shutdown
 
 Handle clean server shutdown, closing WebSocket connections.
+
+**Status:** Completed (2026-02-18)
 
 **Files to modify:**
 

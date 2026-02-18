@@ -3,7 +3,7 @@ import { defineConfig } from "oxlint";
 
 export default defineConfig({
 	extends: [nkzw],
-	ignorePatterns: ["dist", "coverage"],
+	ignorePatterns: ["dist", "coverage", "public"],
 	rules: {
 		"@typescript-eslint/no-explicit-any": "error",
 	},

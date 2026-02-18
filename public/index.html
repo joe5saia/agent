@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>Agent Chat</title>
+		<link rel="stylesheet" href="/ui/style.css" />
+	</head>
+	<body>
+		<div class="layout">
+			<aside class="sidebar">
+				<div class="sidebar-header">
+					<h1>Sessions</h1>
+					<button id="new-session" type="button">New Session</button>
+				</div>
+				<ul id="session-list"></ul>
+			</aside>
+			<main class="chat">
+				<div id="messages" class="messages"></div>
+				<form id="composer" class="composer">
+					<textarea id="prompt" rows="3" placeholder="Send a message"></textarea>
+					<div class="actions">
+						<button id="send" type="submit">Send</button>
+						<button id="cancel" type="button" hidden>Cancel</button>
+					</div>
+				</form>
+			</main>
+		</div>
+		<script type="module" src="/ui/app.js"></script>
+	</body>
+</html>

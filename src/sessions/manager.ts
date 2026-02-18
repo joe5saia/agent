@@ -32,6 +32,12 @@ interface SessionManagerOptions {
 	sessionsDir?: string;
 }
 
+interface GenerateTitleOptions {
+	assistantText: string;
+	generate?: (prompt: string) => Promise<string>;
+	userText: string;
+}
+
 const defaultSessionName = "New Session";
 /**
  * Session records do not persist provider API metadata, so reconstructed assistant
@@ -280,6 +286,38 @@ export class SessionManager {
 		});
 	}
 
+	/**
+	 * Generates and persists a session title unless it was explicitly set by the user.
+	 */
+	public async generateTitle(id: string, options: GenerateTitleOptions): Promise<string> {
+		this.#assertValidSessionId(id);
+		return await this.#withSessionLock(id, async () => {
+			const metadata = await this.get(id);
+			if (metadata.name !== defaultSessionName) {
+				return metadata.name;
+			}
+
+			const prompt = [
+				"Generate a concise conversation title.",
+				"Max 6 words. No quotes. Plain text only.",
+				`User: ${options.userText}`,
+				`Assistant: ${options.assistantText}`,
+			].join(String.raw`\n`);
+
+			let title = "";
+			try {
+				title = options.generate === undefined ? "" : (await options.generate(prompt)).trim();
+			} catch {
+				title = "";
+			}
+
+			const normalized = this.#normalizeTitle(title);
+			const finalTitle = normalized === "" ? this.#fallbackTitle(options.userText) : normalized;
+			await this.#writeMetadataAtomic(id, { ...metadata, name: finalTitle });
+			return finalTitle;
+		});
+	}
+
 	#assertValidSessionId(id: string): void {
 		if (!isValidSessionId(id)) {
 			throw new Error(`Invalid session ID: ${id}`);
@@ -359,6 +397,26 @@ export class SessionManager {
 		return join(this.#resolveSessionDir(id), "session.jsonl");
 	}
 
+	#fallbackTitle(userText: string): string {
+		const trimmed = userText.trim();
+		if (trimmed.length <= 60) {
+			return trimmed.length > 0 ? trimmed : defaultSessionName;
+		}
+
+		const sliced = trimmed.slice(0, 60);
+		const lastSpace = sliced.lastIndexOf(" ");
+		const boundary = lastSpace <= 0 ? sliced : sliced.slice(0, lastSpace);
+		return `${boundary.trimEnd()}...`;
+	}
+
+	#normalizeTitle(rawTitle: string): string {
+		const singleLine = rawTitle.replaceAll(/\s+/g, " ").trim();
+		if (singleLine === "") {
+			return "";
+		}
+		return singleLine.split(" ").slice(0, 6).join(" ");
+	}
+
 	async #withSessionLock<T>(id: string, operation: () => Promise<T>): Promise<T> {
 		const priorLock = this.#locks.get(id) ?? Promise.resolve();
 		let release!: () => void;
@@ -389,3 +447,4 @@ export class SessionManager {
 }
 
 export type { AppendMessageInput, CreateSessionOptions, SessionManagerOptions };
+export type { GenerateTitleOptions };

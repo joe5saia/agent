@@ -7,6 +7,7 @@ import type {
 	Provider,
 	SimpleStreamOptions,
 } from "@mariozechner/pi-ai";
+import type { RetryConfig, RetryStatusEvent } from "./retry.js";
 
 /**
  * Stream interface returned by streamSimple, abstracted for testability.
@@ -20,7 +21,16 @@ export interface AssistantMessageEventStreamLike extends AsyncIterable<Assistant
  */
 export interface AgentLoopConfig {
 	apiKeyResolver?: (provider: Provider) => Promise<string | undefined>;
+	logger?: {
+		error(event: string, fields?: Record<string, unknown>): void;
+		info(event: string, fields?: Record<string, unknown>): void;
+		warn(event: string, fields?: Record<string, unknown>): void;
+	};
 	maxIterations: number;
+	onStatus?: (event: RetryStatusEvent) => void;
+	retry?: RetryConfig;
+	runId?: string;
+	sessionId?: string;
 	streamFactory?: (
 		model: Model<Api>,
 		context: Context,
@@ -39,6 +49,10 @@ export type AgentEvent =
 	| {
 			message: string;
 			type: "error";
+	  }
+	| {
+			status: RetryStatusEvent;
+			type: "status";
 	  }
 	| {
 			toolResult: Extract<Message, { role: "toolResult" }>;
