@@ -41,3 +41,7 @@ Temporary working files (plans, research notes, drafts). Everything except `scra
 ## Starting Work
 
 Work is tracked in implementation plans in the file [`docs/implementation-plan.md`](docs/implementation-plan.md). When you start work read the plan and update it as you go. Make sure you track work in the plan as you complete so that we can keep track of the status of the work.
+
+## Documenting Bugs
+
+When you find a bug that you cannot fix right away, please document it in [docs/known-bugs.md](docs/known-bugs.md). Include a description of the bug, steps to reproduce, and any relevant information that may help in fixing the bug.
