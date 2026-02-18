@@ -2,6 +2,10 @@
 
 Ordered build plan for the AI agent, derived from the spec documents. Each task produces working, testable code and lists its acceptance criteria (spec test scenario IDs).
 
+## Maintenance Updates
+
+- **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
+
 **Related documents:**
 
 - [Project Structure](spec-project-structure.md) — phase overview and dependency graph

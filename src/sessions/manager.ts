@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Message } from "@mariozechner/pi-ai";
+import type { Api, Message } from "@mariozechner/pi-ai";
 import { appendRecord, readRecords } from "./jsonl.js";
 import {
 	isValidSessionId,
@@ -33,6 +33,12 @@ interface SessionManagerOptions {
 }
 
 const defaultSessionName = "New Session";
+/**
+ * Session records do not persist provider API metadata, so reconstructed assistant
+ * messages use a stable synthetic provider/api pair.
+ */
+const persistedAssistantApi: Api = "openai-responses";
+const persistedAssistantProvider = "session";
 
 /**
  * Expands a path that starts with ~/.
@@ -321,10 +327,10 @@ export class SessionManager {
 		});
 
 		return {
-			api: "session",
+			api: persistedAssistantApi,
 			content: assistantContent,
 			model: this.#defaultModel,
-			provider: "session",
+			provider: persistedAssistantProvider,
 			role: "assistant",
 			stopReason: "stop",
 			timestamp: Date.parse(record.timestamp),
@@ -342,7 +348,7 @@ export class SessionManager {
 				output: 0,
 				totalTokens: 0,
 			},
-		} as Message;
+		};
 	}
 
 	#resolveSessionDir(id: string): string {
