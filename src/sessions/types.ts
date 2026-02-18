@@ -50,10 +50,21 @@ export interface SessionMetadata {
 	id: string;
 	lastMessageAt: string;
 	messageCount: number;
+	metrics: SessionMetrics;
 	model: string;
 	name: string;
 	source: "cron" | "interactive";
 	systemPromptOverride?: string;
+}
+
+/**
+ * Aggregated usage metrics persisted in metadata.json.
+ */
+export interface SessionMetrics {
+	totalDurationMs: number;
+	totalTokens: number;
+	totalToolCalls: number;
+	totalTurns: number;
 }
 
 /**

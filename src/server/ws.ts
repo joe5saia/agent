@@ -369,6 +369,17 @@ export class WsRuntime {
 						status: status.status,
 					});
 				},
+				onTurnComplete: (event: {
+					durationMs: number;
+					inputTokens: number;
+					outputTokens: number;
+					toolCalls: number;
+					totalTokens: number;
+				}) => {
+					void this.#deps.sessionManager.recordTurnMetrics(sessionId, event).catch(() => {
+						return;
+					});
+				},
 				retry: this.#options.retry,
 				runId,
 				sessionId,

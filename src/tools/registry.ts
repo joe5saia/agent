@@ -17,6 +17,13 @@ export class ToolRegistry {
 	}
 
 	/**
+	 * Removes all registered tools.
+	 */
+	public clear(): void {
+		this.#toolsByName.clear();
+	}
+
+	/**
 	 * Removes a registered tool by name.
 	 */
 	public unregister(name: string): boolean {
@@ -58,6 +65,16 @@ export class ToolRegistry {
 			}
 		}
 		for (const tool of workflowTools) {
+			this.register(tool);
+		}
+	}
+
+	/**
+	 * Replaces all tools atomically with a new list.
+	 */
+	public replaceAll(tools: Array<AgentTool>): void {
+		this.clear();
+		for (const tool of tools) {
 			this.register(tool);
 		}
 	}

@@ -1,0 +1,19 @@
+[Unit]
+Description=AI Agent Runtime
+After=network-online.target tailscaled.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=agent
+Group=agent
+WorkingDirectory=/opt/agent
+EnvironmentFile=%h/.agent/.env
+ExecStart=/usr/bin/node /opt/agent/dist/index.js
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

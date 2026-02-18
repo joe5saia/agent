@@ -235,6 +235,11 @@ export class WorkflowEngine {
 							? {}
 							: { apiKeyResolver: this.#deps.apiKeyResolver }),
 						maxIterations: this.#deps.defaultMaxIterations,
+						onTurnComplete: (event) => {
+							void this.#deps.sessionManager.recordTurnMetrics(session.id, event).catch(() => {
+								return;
+							});
+						},
 						sessionId: session.id,
 					},
 				);

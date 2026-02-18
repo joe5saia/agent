@@ -28,6 +28,12 @@ npm test
 
 # Build
 npm run build
+
+# Start server runtime
+node dist/index.js
+
+# One-shot CLI prompt mode
+echo "hello" | node dist/index.js --prompt
 ```
 
 ## Development
@@ -46,7 +52,14 @@ npm run build
 
 ## Architecture
 
-See [spec.md](spec.md) for the full specification.
+- Runtime entrypoint: `src/index.ts`
+- Web UI: `http://127.0.0.1:8080/ui/` (default)
+- Full specs: `docs/spec-*.md`
+
+## Deployment
+
+See [docs/deployment-guide.md](docs/deployment-guide.md) for VM setup, systemd, Tailscale
+exposure, and operations guidance.
 
 ## License
 

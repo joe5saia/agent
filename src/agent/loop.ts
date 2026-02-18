@@ -76,18 +76,32 @@ export async function agentLoop(
 
 		const assistantMessage = await response.result();
 		messages.push(assistantMessage);
+		const turnDurationMs = Date.now() - turnStart;
+		const toolCallCount = assistantMessage.content.filter(
+			(entry) => entry.type === "toolCall",
+		).length;
+		const turnMetrics = {
+			durationMs: turnDurationMs,
+			inputTokens: assistantMessage.usage.input,
+			outputTokens: assistantMessage.usage.output,
+			toolCalls: toolCallCount,
+			totalTokens: assistantMessage.usage.totalTokens,
+		};
 
 		if (assistantMessage.stopReason !== "toolUse") {
 			config.logger?.info("turn_end", {
-				durationMs: Date.now() - turnStart,
+				durationMs: turnDurationMs,
+				inputTokens: assistantMessage.usage.input,
 				iteration: iterations,
 				model: model.id,
 				outputTokens: assistantMessage.usage.output,
 				runId: config.runId,
 				sessionId: config.sessionId,
 				stopReason: assistantMessage.stopReason,
+				toolCalls: toolCallCount,
 				totalTokens: assistantMessage.usage.totalTokens,
 			});
+			config.onTurnComplete?.(turnMetrics);
 			return messages;
 		}
 
@@ -157,13 +171,18 @@ export async function agentLoop(
 			});
 		}
 		config.logger?.info("turn_end", {
-			durationMs: Date.now() - turnStart,
+			durationMs: turnDurationMs,
+			inputTokens: assistantMessage.usage.input,
 			iteration: iterations,
 			model: model.id,
+			outputTokens: assistantMessage.usage.output,
 			runId: config.runId,
 			sessionId: config.sessionId,
 			stopReason: assistantMessage.stopReason,
+			toolCalls: toolCallCount,
+			totalTokens: assistantMessage.usage.totalTokens,
 		});
+		config.onTurnComplete?.(turnMetrics);
 	}
 
 	messages.push({

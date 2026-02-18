@@ -242,6 +242,11 @@ export class CronService {
 						: { apiKeyResolver: this.#deps.apiKeyResolver }),
 					logger: this.#deps.logger,
 					maxIterations,
+					onTurnComplete: (event) => {
+						void this.#deps.sessionManager.recordTurnMetrics(session.id, event).catch(() => {
+							return;
+						});
+					},
 					sessionId: session.id,
 				},
 			);

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { watch, type FSWatcher, readFileSync } from "node:fs";
 import { Value } from "@sinclair/typebox/value";
 import { parse as parseYaml, YAMLParseError } from "yaml";
 import { defaultConfig } from "./defaults.js";
@@ -34,6 +34,15 @@ export class ConfigValidationError extends Error {
 		super(message);
 		this.name = "ConfigValidationError";
 	}
+}
+
+export interface ConfigWatchEvent {
+	path: string;
+	type: "change" | "rename";
+}
+
+export interface ConfigWatcher {
+	close: () => void;
 }
 
 type JsonValue = boolean | null | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -152,4 +161,33 @@ export function loadConfig(path: string): AgentConfig {
 	}
 
 	return withDefaults as AgentConfig;
+}
+
+/**
+ * Watches config-related paths and invokes onChange when files are updated.
+ */
+export function watchConfig(
+	paths: Array<string>,
+	onChange: (event: ConfigWatchEvent) => void,
+): ConfigWatcher {
+	const watchers: Array<FSWatcher> = [];
+	for (const path of paths) {
+		const watcher = watch(path, { persistent: true }, (eventType) => {
+			if (eventType === "change" || eventType === "rename") {
+				onChange({ path, type: eventType });
+			}
+		});
+		watcher.on("error", () => {
+			return;
+		});
+		watchers.push(watcher);
+	}
+
+	return {
+		close: () => {
+			for (const watcher of watchers) {
+				watcher.close();
+			}
+		},
+	};
 }

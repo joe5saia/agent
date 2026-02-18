@@ -9,6 +9,7 @@ import {
 	isValidSessionId,
 	type CompactionSettings,
 	type ContentBlock,
+	type SessionMetrics,
 	type SessionContext,
 	type SessionListItem,
 	type SessionMetadata,
@@ -27,6 +28,14 @@ interface AppendMessageInput {
 	isError?: boolean;
 	role: "assistant" | "toolResult" | "user";
 	toolCallId?: string;
+}
+
+export interface SessionTurnMetricsInput {
+	durationMs: number;
+	inputTokens: number;
+	outputTokens: number;
+	toolCalls: number;
+	totalTokens: number;
 }
 
 interface SessionManagerOptions {
@@ -135,6 +144,12 @@ export class SessionManager {
 			id,
 			lastMessageAt: timestamp,
 			messageCount: 0,
+			metrics: {
+				totalDurationMs: 0,
+				totalTokens: 0,
+				totalToolCalls: 0,
+				totalTurns: 0,
+			},
 			model: this.#defaultModel,
 			name: options.name ?? defaultSessionName,
 			source: options.source ?? "interactive",
@@ -333,6 +348,36 @@ export class SessionManager {
 			const next: SessionMetadata = {
 				...current,
 				...patch,
+			};
+			await this.#writeMetadataAtomic(id, next);
+			return next;
+		});
+	}
+
+	/**
+	 * Aggregates turn-level usage metrics in metadata.json.
+	 */
+	public async recordTurnMetrics(
+		id: string,
+		input: SessionTurnMetricsInput,
+	): Promise<SessionMetadata> {
+		this.#assertValidSessionId(id);
+		return await this.#withSessionLock(id, async () => {
+			const metadata = await this.get(id);
+			const currentMetrics: SessionMetrics = metadata.metrics ?? {
+				totalDurationMs: 0,
+				totalTokens: 0,
+				totalToolCalls: 0,
+				totalTurns: 0,
+			};
+			const next: SessionMetadata = {
+				...metadata,
+				metrics: {
+					totalDurationMs: currentMetrics.totalDurationMs + Math.max(0, input.durationMs),
+					totalTokens: currentMetrics.totalTokens + Math.max(0, input.totalTokens),
+					totalToolCalls: currentMetrics.totalToolCalls + Math.max(0, input.toolCalls),
+					totalTurns: currentMetrics.totalTurns + 1,
+				},
 			};
 			await this.#writeMetadataAtomic(id, next);
 			return next;

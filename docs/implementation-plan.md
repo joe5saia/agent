@@ -4,6 +4,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-18:** Completed Phase 4 hardening delivery (config hot-reload, execution limit enforcement, token metrics tracking, systemd unit, integration tests, and deployment docs). Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Completed Phase 3 automation delivery (cron service and API, workflow engine/tooling/API, session compaction, and log rotation) with full test coverage. Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
 - **2026-02-18:** Added spec coverage for OAuth subscription credentials (`~/.agent/auth.json`) and env-first credential resolution in `docs/spec-security.md`.
@@ -777,6 +778,8 @@ npm run check            # Lint, format, type check pass
 
 Watch configuration files and reload tools, cron jobs, and workflows without restarting.
 
+**Status:** Completed (2026-02-18)
+
 **Files to modify:**
 
 - `src/config/loader.ts` — add `watchConfig(paths, onChange)` using `fs.watch`
@@ -798,6 +801,8 @@ Watch configuration files and reload tools, cron jobs, and workflows without res
 
 Harden tool execution limits and verify enforcement across all tool types.
 
+**Status:** Completed (2026-02-18)
+
 **Files to modify:**
 
 - `src/tools/executor.ts` — verify truncation and timeout apply to all tools (built-in and CLI)
@@ -812,6 +817,8 @@ Harden tool execution limits and verify enforcement across all tool types.
 ### Task 4.3 — Token Usage Tracking
 
 Track and aggregate token usage per turn and per session.
+
+**Status:** Completed (2026-02-18)
 
 **Files to modify:**
 
@@ -837,6 +844,8 @@ Track and aggregate token usage per turn and per session.
 
 Create a systemd unit file for process management.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `deploy/agent.service` — systemd unit file with auto-restart, environment file, working directory, logging to journal
@@ -858,6 +867,8 @@ Create a systemd unit file for process management.
 
 Write integration tests that exercise the full stack with a real LLM provider.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `test/integration/agent-e2e.test.ts` — end-to-end test: create session → send message → receive streamed response → verify JSONL persistence
@@ -878,6 +889,8 @@ Write integration tests that exercise the full stack with a real LLM provider.
 ### Task 4.6 — Deployment Documentation
 
 Write deployment and operations documentation.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 

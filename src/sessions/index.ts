@@ -7,6 +7,7 @@ export type {
 	ContentBlock,
 	SessionContext,
 	SessionListItem,
+	SessionMetrics,
 	SessionMetadata,
 	SessionRecord,
 } from "./types.js";
@@ -15,4 +16,5 @@ export type {
 	CreateSessionOptions,
 	GenerateTitleOptions,
 	SessionManagerOptions,
+	SessionTurnMetricsInput,
 } from "./manager.js";

@@ -205,6 +205,54 @@ describe("built-in tools", () => {
 		expect(result.content.trim()).toBe("1:");
 	});
 
+	it("enforces output truncation for built-in bash tool", async () => {
+		const root = createTempDirectory();
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, {
+			security: {
+				allowedEnv: ["PATH"],
+				allowedPaths: [root],
+				blockedCommands: [],
+				deniedPaths: [],
+			},
+			tools: {
+				outputLimit: 64,
+				timeout: 2,
+			},
+		});
+
+		const result = await executeTool(registry, "bash", {
+			command: "node -e \"process.stdout.write('x'.repeat(1024))\"",
+		});
+
+		expect(result.isError).toBe(false);
+		expect(result.content).toContain("[output truncated]");
+	});
+
+	it("enforces timeout for built-in bash tool", async () => {
+		const root = createTempDirectory();
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, {
+			security: {
+				allowedEnv: ["PATH"],
+				allowedPaths: [root],
+				blockedCommands: [],
+				deniedPaths: [],
+			},
+			tools: {
+				outputLimit: 1000,
+				timeout: 1,
+			},
+		});
+
+		const result = await executeTool(registry, "bash", {
+			command: "node -e \"setTimeout(() => process.stdout.write('done'), 5000)\"",
+		});
+
+		expect(result.isError).toBe(true);
+		expect(result.content).toMatch(/timed out/i);
+	});
+
 	it("S6.10: read_file rejects targets outside allowed paths", async () => {
 		const root = createTempDirectory();
 		const outside = createTempDirectory();

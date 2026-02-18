@@ -8,6 +8,7 @@ Project documentation for all contributors and agents. Files in this directory s
 
 | Document                                               | Description                                                            |
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
+| [deployment-guide.md](deployment-guide.md)             | VM deployment, systemd service setup, Tailscale exposure, operations   |
 | [implementation-plan.md](implementation-plan.md)       | Ordered build plan with tasks, deliverables, and acceptance criteria   |
 | [known-bugs.md](known-bugs.md)                         | Open correctness/security regressions tracked for follow-up fixes      |
 | [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                |

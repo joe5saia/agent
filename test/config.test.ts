@@ -1,8 +1,14 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
-import { ConfigNotFoundError, ConfigValidationError, loadConfig } from "../src/config/index.js";
+import {
+	ConfigNotFoundError,
+	ConfigValidationError,
+	loadConfig,
+	watchConfig,
+} from "../src/config/index.js";
 
 const tempDirectories: Array<string> = [];
 
@@ -148,5 +154,32 @@ logging:
 
 		expect(config.systemPrompt.identityFile).toBe("~/.agent/identity.md");
 		expect(config.logging.rotation.maxDays).toBe(14);
+	});
+
+	it("S17.8: watches config files and emits reload events", async () => {
+		const path = createTempFile(`
+model:
+  provider: openai
+  name: gpt-4o-mini
+security:
+  blocked_commands: []
+`);
+		const configDir = dirname(path);
+
+		const eventPromise = new Promise<{ path: string; type: "change" | "rename" }>((resolve) => {
+			const watcher = watchConfig([configDir], (event) => {
+				watcher.close();
+				resolve(event);
+			});
+		});
+
+		await sleep(10);
+		writeFileSync(
+			path,
+			"model:\n  provider: openai\n  name: gpt-4o-mini\nsecurity:\n  blocked_commands: []\nserver:\n  port: 8081\n",
+			"utf8",
+		);
+		const event = await eventPromise;
+		expect(event.path).toBe(configDir);
 	});
 });

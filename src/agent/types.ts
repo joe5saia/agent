@@ -28,6 +28,13 @@ export interface AgentLoopConfig {
 	};
 	maxIterations: number;
 	onStatus?: (event: RetryStatusEvent) => void;
+	onTurnComplete?: (event: {
+		durationMs: number;
+		inputTokens: number;
+		outputTokens: number;
+		toolCalls: number;
+		totalTokens: number;
+	}) => void;
 	retry?: RetryConfig;
 	runId?: string;
 	sessionId?: string;
