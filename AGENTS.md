@@ -37,3 +37,7 @@ Tracked project documentation for all contributors and agents. The `docs/README.
 ### `scratch_docs/`
 
 Temporary working files (plans, research notes, drafts). Everything except `scratch_docs/README.md` is git-ignored. Anything worth keeping should be promoted to `docs/`.
+
+## Starting Work
+
+Work is tracked in implementation plans in the file [`docs/implementation-plan.md`](docs/implementation-plan.md). When you start work read the plan and update it as you go. Make sure you track work in the plan as you complete so that we can keep track of the status of the work.
