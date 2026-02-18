@@ -25,6 +25,14 @@ export async function agentLoop(
 	while (iterations < config.maxIterations) {
 		signal?.throwIfAborted();
 		iterations += 1;
+		const apiKey = await config.apiKeyResolver?.(model.provider);
+		const streamOptions: { apiKey?: string; signal?: AbortSignal } = {};
+		if (apiKey !== undefined) {
+			streamOptions.apiKey = apiKey;
+		}
+		if (signal !== undefined) {
+			streamOptions.signal = signal;
+		}
 
 		const response = streamFactory(
 			model,
@@ -33,11 +41,7 @@ export async function agentLoop(
 				systemPrompt,
 				tools: tools.toToolSchemas(),
 			},
-			signal === undefined
-				? undefined
-				: {
-						signal,
-					},
+			Object.keys(streamOptions).length > 0 ? streamOptions : undefined,
 		);
 
 		for await (const event of response) {

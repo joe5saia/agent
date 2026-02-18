@@ -4,6 +4,7 @@ import type {
 	Context,
 	Message,
 	Model,
+	Provider,
 	SimpleStreamOptions,
 } from "@mariozechner/pi-ai";
 
@@ -18,6 +19,7 @@ export interface AssistantMessageEventStreamLike extends AsyncIterable<Assistant
  * Agent loop runtime configuration.
  */
 export interface AgentLoopConfig {
+	apiKeyResolver?: (provider: Provider) => Promise<string | undefined>;
 	maxIterations: number;
 	streamFactory?: (
 		model: Model<Api>,

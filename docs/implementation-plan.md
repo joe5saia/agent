@@ -291,6 +291,8 @@ Wire everything together into a CLI script that loads config, registers tools, a
 
 Wire provider OAuth subscriptions into runtime model calls while preserving env-var override behavior.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/auth/store.ts` — load/save `~/.agent/auth.json`, atomic writes, typed provider credential map

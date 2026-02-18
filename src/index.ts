@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getModels, getProviders, type Api, type Message, type Model } from "@mariozechner/pi-ai";
 import { agentLoop, buildSystemPrompt } from "./agent/index.js";
+import { resolveApiKey } from "./auth/index.js";
 import { loadConfig } from "./config/index.js";
 import { createLogger } from "./logging/index.js";
 import { SessionManager } from "./sessions/index.js";
@@ -157,6 +158,7 @@ export async function main(): Promise<void> {
 
 	const beforeLength = contextMessages.length;
 	const finalMessages = await agentLoop(contextMessages, registry, systemPrompt, model, {
+		apiKeyResolver: resolveApiKey,
 		maxIterations: config.tools.maxIterations,
 	});
 	for (const message of finalMessages.slice(beforeLength)) {
