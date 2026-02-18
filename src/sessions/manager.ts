@@ -3,9 +3,11 @@ import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promise
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { Api, Message } from "@mariozechner/pi-ai";
+import { compactSession } from "./compaction.js";
 import { appendRecord, readRecords } from "./jsonl.js";
 import {
 	isValidSessionId,
+	type CompactionSettings,
 	type ContentBlock,
 	type SessionContext,
 	type SessionListItem,
@@ -28,8 +30,15 @@ interface AppendMessageInput {
 }
 
 interface SessionManagerOptions {
+	compaction?: CompactionSettings;
+	contextWindow?: number;
 	defaultModel: string;
+	logger?: {
+		info(event: string, fields?: Record<string, unknown>): void;
+		warn(event: string, fields?: Record<string, unknown>): void;
+	};
 	sessionsDir?: string;
+	summarizeCompaction?: (input: { mode: "initial" | "update"; prompt: string }) => Promise<string>;
 }
 
 interface GenerateTitleOptions {
@@ -83,12 +92,31 @@ function generateSessionId(now: number = Date.now()): string {
  * Manages session persistence and context reconstruction.
  */
 export class SessionManager {
+	readonly #compaction: CompactionSettings;
+	readonly #contextWindow: number;
 	readonly #defaultModel: string;
+	readonly #logger:
+		| {
+				info(event: string, fields?: Record<string, unknown>): void;
+				warn(event: string, fields?: Record<string, unknown>): void;
+		  }
+		| undefined;
 	readonly #locks = new Map<string, Promise<void>>();
+	readonly #summarizeCompaction:
+		| ((input: { mode: "initial" | "update"; prompt: string }) => Promise<string>)
+		| undefined;
 	readonly #sessionsDir: string;
 
 	public constructor(options: SessionManagerOptions) {
+		this.#compaction = options.compaction ?? {
+			enabled: true,
+			keepRecentTokens: 20_000,
+			reserveTokens: 16_384,
+		};
+		this.#contextWindow = options.contextWindow ?? 200_000;
 		this.#defaultModel = options.defaultModel;
+		this.#logger = options.logger;
+		this.#summarizeCompaction = options.summarizeCompaction;
 		this.#sessionsDir = expandHomePath(options.sessionsDir ?? "~/.agent/sessions");
 	}
 
@@ -219,7 +247,32 @@ export class SessionManager {
 	public async buildContext(id: string): Promise<Array<Message>> {
 		this.#assertValidSessionId(id);
 		const context = await this.getContextWithRecords(id);
-		return context.messages;
+		if (!this.#compaction.enabled) {
+			return context.messages;
+		}
+
+		const contextTokens = this.#estimateContextTokens(context.messages);
+		const limit = this.#contextWindow - this.#compaction.reserveTokens;
+		if (contextTokens <= limit) {
+			return context.messages;
+		}
+
+		const compacted = await compactSession(this.#compaction, {
+			appendRecord: async (record) => {
+				await appendRecord(this.#sessionFilePath(id), record);
+			},
+			estimateTokens: (text: string) => this.#estimateTokens(text),
+			...(this.#logger === undefined ? {} : { logger: this.#logger }),
+			records: context.records,
+			sessionId: id,
+			...(this.#summarizeCompaction === undefined ? {} : { summarize: this.#summarizeCompaction }),
+		});
+		if (!compacted) {
+			return context.messages;
+		}
+
+		const refreshed = await this.getContextWithRecords(id);
+		return refreshed.messages;
 	}
 
 	/**
@@ -326,6 +379,24 @@ export class SessionManager {
 
 	#metadataFilePath(id: string): string {
 		return join(this.#resolveSessionDir(id), "metadata.json");
+	}
+
+	#estimateContextTokens(messages: Array<Message>): number {
+		return messages.reduce((total, message) => {
+			const text = (
+				Array.isArray(message.content)
+					? message.content
+					: [{ text: message.content, type: "text" as const }]
+			)
+				.filter((entry) => entry.type === "text")
+				.map((entry) => entry.text)
+				.join("\n");
+			return total + this.#estimateTokens(text);
+		}, 0);
+	}
+
+	#estimateTokens(text: string): number {
+		return Math.max(1, Math.ceil(text.length / 4));
 	}
 
 	#recordToMessage(record: Extract<SessionRecord, { recordType: "message" }>): Message {

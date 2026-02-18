@@ -32,6 +32,7 @@ describe("createLogger", () => {
 		const logger = createLogger("agent-loop", {
 			file: logPath,
 			level: "debug",
+			rotation: { maxDays: 30, maxSizeMb: 100 },
 			stdout: false,
 		});
 
@@ -54,6 +55,7 @@ describe("createLogger", () => {
 		const logger = createLogger("agent-loop", {
 			file: logPath,
 			level: "info",
+			rotation: { maxDays: 30, maxSizeMb: 100 },
 			stdout: false,
 		});
 
@@ -71,6 +73,7 @@ describe("createLogger", () => {
 		const logger = createLogger("security", {
 			file: logPath,
 			level: "debug",
+			rotation: { maxDays: 30, maxSizeMb: 100 },
 			stdout: false,
 		});
 
@@ -94,6 +97,7 @@ describe("createLogger", () => {
 		const logger = createLogger("agent-loop", {
 			file: logPath,
 			level: "debug",
+			rotation: { maxDays: 30, maxSizeMb: 100 },
 			stdout: false,
 		});
 
@@ -118,6 +122,7 @@ describe("createLogger", () => {
 			{
 				file: logPath,
 				level: "info",
+				rotation: { maxDays: 30, maxSizeMb: 100 },
 				stdout: true,
 			},
 			{ writeStdout },

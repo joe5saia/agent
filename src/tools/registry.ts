@@ -17,6 +17,13 @@ export class ToolRegistry {
 	}
 
 	/**
+	 * Removes a registered tool by name.
+	 */
+	public unregister(name: string): boolean {
+		return this.#toolsByName.delete(name);
+	}
+
+	/**
 	 * Returns a tool by name.
 	 */
 	public get(name: string): AgentTool | undefined {
@@ -39,5 +46,19 @@ export class ToolRegistry {
 			name: tool.name,
 			parameters: tool.parameters,
 		}));
+	}
+
+	/**
+	 * Replaces all workflow_* tools in one pass, used for startup and reload.
+	 */
+	public registerWorkflowTools(workflowTools: Array<AgentTool>): void {
+		for (const name of this.#toolsByName.keys()) {
+			if (name.startsWith("workflow_")) {
+				this.#toolsByName.delete(name);
+			}
+		}
+		for (const tool of workflowTools) {
+			this.register(tool);
+		}
 	}
 }

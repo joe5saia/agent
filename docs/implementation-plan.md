@@ -4,6 +4,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-18:** Completed Phase 3 automation delivery (cron service and API, workflow engine/tooling/API, session compaction, and log rotation) with full test coverage. Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
 - **2026-02-18:** Added spec coverage for OAuth subscription credentials (`~/.agent/auth.json`) and env-first credential resolution in `docs/spec-security.md`.
 - **2026-02-18:** Completed Phase 2 web interface delivery (`src/server/*`, `public/*`, retry integration, websocket streaming, session naming, and related tests). Verification: `npm test` and `npm run check`.
@@ -577,6 +578,8 @@ npm run check            # Lint, format, type check pass
 
 Build the cron scheduling service with per-job tool policies.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/cron/types.ts` — `CronJobConfig`, `CronJobStatus` type definitions
@@ -605,6 +608,8 @@ Build the cron scheduling service with per-job tool policies.
 
 Build the REST endpoints for cron job management.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/server/routes/cron.ts` — route handlers for `GET /api/cron`, `POST /api/cron/:id/pause`, `POST /api/cron/:id/resume`
@@ -625,6 +630,8 @@ Build the REST endpoints for cron job management.
 ### Task 3.3 — Workflow Engine
 
 Build the workflow execution engine with condition evaluation, templating, and step failure handling.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -658,6 +665,8 @@ Build the workflow execution engine with condition evaluation, templating, and s
 
 Expose loaded workflows as agent tools so the LLM can trigger them.
 
+**Status:** Completed (2026-02-18)
+
 **Files to modify:**
 
 - `src/workflows/engine.ts` — add `workflowToTool(workflow): AgentTool` converting a `WorkflowDefinition` to a callable tool
@@ -673,6 +682,8 @@ Expose loaded workflows as agent tools so the LLM can trigger them.
 ### Task 3.5 — Workflow REST API
 
 Build the REST endpoints for workflow management.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -691,6 +702,8 @@ Build the REST endpoints for workflow management.
 ### Task 3.6 — Session Compaction
 
 Build the context compaction strategy with append-only overlay records.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -721,6 +734,8 @@ Build the context compaction strategy with append-only overlay records.
 ### Task 3.7 — Log Rotation
 
 Build the log file rotation mechanism.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 

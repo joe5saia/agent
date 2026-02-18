@@ -2,7 +2,9 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import type { AgentConfig } from "../config/index.js";
 import { identityMiddleware } from "./middleware/identity.js";
+import { createCronRoutes } from "./routes/cron.js";
 import { createSessionsRoutes } from "./routes/sessions.js";
+import { createWorkflowsRoutes } from "./routes/workflows.js";
 import type { ServerAppContext, ServerDependencies } from "./types.js";
 
 /**
@@ -42,6 +44,8 @@ export function createApp(
 	);
 
 	app.route("/api/sessions", createSessionsRoutes());
+	app.route("/api/cron", createCronRoutes());
+	app.route("/api/workflows", createWorkflowsRoutes());
 
 	return app;
 }

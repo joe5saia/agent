@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentConfig } from "../config/index.js";
 import { redactValue, type RedactableValue } from "./redaction.js";
+import { rotateIfNeeded } from "./rotation.js";
 
 /**
  * Supported log levels in ascending verbosity order.
@@ -30,6 +31,10 @@ export interface Logger {
 export interface LoggerConfig {
 	file: string;
 	level: AgentConfig["logging"]["level"];
+	rotation: {
+		maxDays: number;
+		maxSizeMb: number;
+	};
 	stdout: boolean;
 }
 
@@ -91,6 +96,7 @@ export function createLogger(
 		if (config.stdout) {
 			writeStdout(line);
 		}
+		rotateIfNeeded(filePath, config.rotation, now());
 		appendFileSync(filePath, `${line}\n`, "utf8");
 	};
 
