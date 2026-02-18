@@ -9,6 +9,7 @@ Project documentation for all contributors and agents. Files in this directory s
 | Document                                               | Description                                                            |
 | ------------------------------------------------------ | ---------------------------------------------------------------------- |
 | [implementation-plan.md](implementation-plan.md)       | Ordered build plan with tasks, deliverables, and acceptance criteria   |
+| [known-bugs.md](known-bugs.md)                         | Open correctness/security regressions tracked for follow-up fixes      |
 | [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                |
 | [spec-automation.md](spec-automation.md)               | Cron scheduled triggers and structured workflows (§8–§9)               |
 | [spec-configuration.md](spec-configuration.md)         | Configuration validation and session naming UX (§17–§18)               |

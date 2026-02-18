@@ -33,6 +33,8 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 Build the configuration module that all other modules depend on.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/config/schema.ts` — TypeBox schemas for `AgentConfig` and all nested sections
@@ -59,6 +61,8 @@ Build the configuration module that all other modules depend on.
 
 Build the structured JSON logger with redaction.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/logging/logger.ts` — `createLogger()` returning a logger with `error`, `warn`, `info`, `debug` methods; outputs JSON Lines to stdout and/or a file
@@ -84,6 +88,8 @@ Build the structured JSON logger with redaction.
 
 Build the four security modules: command blocklist, environment allowlist, path filter, and log redaction.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/security/command-filter.ts` — `isBlockedCommand(command: string): { blocked: boolean; reason?: string }` using pattern matching against the blocklist
@@ -107,6 +113,8 @@ Build the four security modules: command blocklist, environment allowlist, path 
 ### Task 1.4 — Tool System (Registry, Executor, Built-in Tools)
 
 Build the tool registry, executor with safety checks, and the four built-in tools.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -139,6 +147,8 @@ Build the tool registry, executor with safety checks, and the four built-in tool
 
 Load external CLI tools from `tools.yaml` and register them in the tool registry.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/tools/cli-loader.ts` — `loadCliTools(path: string): AgentTool[]` parsing YAML, validating schemas, creating tool definitions with structured `spawn(cmd, args, { shell: false })` execution
@@ -162,6 +172,8 @@ Load external CLI tools from `tools.yaml` and register them in the tool registry
 ### Task 1.6 — Session Manager
 
 Build session persistence with JSONL append-only storage and context building.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -193,6 +205,8 @@ Build session persistence with JSONL append-only storage and context building.
 
 Build the system prompt builder that composes identity, tool descriptions, workflow catalog, session context, and custom instructions.
 
+**Status:** Completed (2026-02-18)
+
 **Files to create:**
 
 - `src/agent/system-prompt.ts` — `buildSystemPrompt(session, tools, workflows, config): string`
@@ -216,6 +230,8 @@ Build the system prompt builder that composes identity, tool descriptions, workf
 ### Task 1.8 — Agent Loop
 
 Build the core agent loop with streaming, tool execution, and cancellation.
+
+**Status:** Completed (2026-02-18)
 
 **Files to create:**
 
@@ -243,6 +259,8 @@ Build the core agent loop with streaming, tool execution, and cancellation.
 ### Task 1.9 — CLI Entry Point
 
 Wire everything together into a CLI script that loads config, registers tools, and runs the agent loop on a prompt from stdin.
+
+**Status:** Completed (2026-02-18)
 
 **Files to modify:**
 
