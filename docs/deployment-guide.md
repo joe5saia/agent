@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Production deployment steps for running the agent on a VM behind Tailscale.
+Production deployment for the agent using an Alpine-based Docker container.
 
 **Related documents:**
 
@@ -12,39 +12,47 @@ Production deployment steps for running the agent on a VM behind Tailscale.
 
 ## 1. Prerequisites
 
-- Ubuntu 22.04+ (or similar Linux distro with systemd)
-- Node.js 20+
-- Tailscale installed and authenticated
-- A dedicated runtime user (recommended: `agent`)
+- Docker Engine 24+ and Docker Compose
+- Optional: Tailscale installed on the host for private exposure
+- API credentials for your provider (for example `ANTHROPIC_API_KEY`)
 
-## 2. Install Runtime
-
-```bash
-sudo useradd --create-home --shell /bin/bash agent
-sudo mkdir -p /opt/agent
-sudo chown -R agent:agent /opt/agent
-```
-
-Clone and build as the runtime user:
+## 2. Configure Environment
 
 ```bash
-sudo -u agent -H bash -lc '
-cd /opt/agent
-git clone <repo-url> .
-npm install
-npm run build
-'
+cp deploy/docker/.env.example deploy/docker/.env
 ```
 
-## 3. Configure Agent Files
-
-Create runtime directories:
+Set credentials in `deploy/docker/.env`:
 
 ```bash
-sudo -u agent -H mkdir -p ~/.agent/{cron,workflows,logs,sessions}
+ANTHROPIC_API_KEY=...
 ```
 
-Create `~/.agent/config.yaml`:
+## 3. Build and Run
+
+```bash
+docker compose --env-file deploy/docker/.env up -d --build
+```
+
+The container uses:
+
+- Alpine-based image (`node:20-alpine`)
+- Persistent volume at `/home/agent/.agent`
+- Non-root runtime user (`agent`)
+
+If no config exists yet, the entrypoint creates a starter config at
+`/home/agent/.agent/config.yaml`.
+
+## 4. Configure Runtime Files
+
+Mount and edit runtime files inside the persisted volume:
+
+- `/home/agent/.agent/config.yaml`
+- `/home/agent/.agent/tools.yaml`
+- `/home/agent/.agent/cron/jobs.yaml`
+- `/home/agent/.agent/workflows/*.yaml`
+
+Example `config.yaml`:
 
 ```yaml
 model:
@@ -52,47 +60,23 @@ model:
   name: claude-3-5-haiku-latest
 
 security:
-  blocked_commands:
-    - "rm -rf"
-    - "sudo"
+  blocked_commands: []
 
 server:
-  host: 127.0.0.1
+  host: 0.0.0.0
   port: 8080
 ```
 
-Optional files:
-
-- `~/.agent/tools.yaml`
-- `~/.agent/cron/jobs.yaml`
-- `~/.agent/workflows/*.yaml`
-
-Create `~/.agent/.env` for API credentials:
+## 5. Operate the Container
 
 ```bash
-ANTHROPIC_API_KEY=...
+docker compose ps
+docker compose logs -f agent
+docker compose restart agent
+docker compose down
 ```
 
-## 4. Install systemd Unit
-
-Install the included unit:
-
-```bash
-sudo cp /opt/agent/deploy/agent.service /etc/systemd/system/agent.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now agent
-```
-
-Check status/logs:
-
-```bash
-sudo systemctl status agent
-sudo journalctl -u agent -f
-```
-
-## 5. Expose Over Tailscale
-
-Serve the local port through Tailscale:
+## 6. Expose Over Tailscale (Optional)
 
 ```bash
 tailscale serve --bg https+insecure://127.0.0.1:8080
@@ -100,21 +84,30 @@ tailscale serve --bg https+insecure://127.0.0.1:8080
 
 Open the printed HTTPS URL and visit `/ui/`.
 
-## 6. Operations
+## 7. Hot-Reload Behavior
 
-- Config hot-reload is enabled for:
+- Runtime reload watches:
   - `~/.agent/config.yaml`
   - `~/.agent/tools.yaml`
   - `~/.agent/cron/jobs.yaml`
   - `~/.agent/workflows/*.yaml`
 - Invalid reloads are logged and ignored; the previous runtime state remains active.
-- Sessions are append-only JSONL files under `~/.agent/sessions`.
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
-- Service fails on startup:
-  - Run `sudo journalctl -u agent -n 200` and fix config validation errors.
-- UI not reachable:
-  - Verify `agent` service is active and `tailscale serve status` shows port `8080`.
+- Container fails to start:
+  - `docker compose logs agent` and fix config validation errors.
+- UI unreachable on host:
+  - Check `docker compose ps` and ensure `8080:8080` is mapped.
 - No model responses:
-  - Confirm `~/.agent/.env` contains valid credentials and that provider/model names are valid.
+  - Confirm credentials in `deploy/docker/.env`.
+
+## 9. Optional systemd Host Wrapper
+
+If you want systemd-level startup for Docker itself, install a wrapper unit:
+
+```bash
+sudo cp deploy/agent.service /etc/systemd/system/agent.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now agent
+```

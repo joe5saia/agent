@@ -36,6 +36,19 @@ node dist/index.js
 echo "hello" | node dist/index.js --prompt
 ```
 
+## Docker (Alpine)
+
+```bash
+# Build and run
+docker compose up -d --build
+
+# Open UI
+open http://127.0.0.1:8080/ui/
+```
+
+The container persists runtime state in a named volume at `/home/agent/.agent`.
+Set API credentials in `deploy/docker/.env` (copy from `deploy/docker/.env.example`).
+
 ## Development
 
 | Command               | Description                                     |

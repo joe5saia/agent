@@ -1,0 +1,13 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - deploy/docker/.env
+    volumes:
+      - /Users/saiaj/.agent:/home/agent/.agent

@@ -10,6 +10,7 @@ coverage/
 # Environment variables
 .env
 .env.*
+!deploy/docker/.env.example
 
 # OS files
 .DS_Store

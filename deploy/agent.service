@@ -1,17 +1,17 @@
 [Unit]
-Description=AI Agent Runtime
-After=network-online.target tailscaled.service
+Description=AI Agent Docker Runtime
+After=network-online.target docker.service tailscaled.service
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 User=agent
 Group=agent
 WorkingDirectory=/opt/agent
-EnvironmentFile=%h/.agent/.env
-ExecStart=/usr/bin/node /opt/agent/dist/index.js
-Restart=always
-RestartSec=5
+ExecStart=/usr/bin/docker compose --env-file deploy/docker/.env up -d --build
+ExecStop=/usr/bin/docker compose down
+TimeoutStartSec=0
 StandardOutput=journal
 StandardError=journal
 
