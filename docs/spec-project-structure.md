@@ -38,9 +38,12 @@ src/
 │   ├── executor.ts             # Tool execution with safety checks
 │   ├── builtin/
 │   │   ├── bash.ts             # Shell command execution
-│   │   ├── read-file.ts        # File reading
-│   │   ├── write-file.ts       # File writing
-│   │   └── list-directory.ts   # Directory listing
+│   │   ├── read.ts             # Text/image file reading with offset/limit pagination
+│   │   ├── write.ts            # File writing
+│   │   ├── edit.ts             # Exact/fuzzy text replacement with diff output
+│   │   ├── grep.ts             # Content search
+│   │   ├── find.ts             # File discovery
+│   │   └── ls.ts               # Directory listing
 │   └── cli-loader.ts           # Load CLI tools from tools.yaml
 ├── sessions/
 │   ├── manager.ts              # Session CRUD operations
@@ -116,7 +119,7 @@ The project is built in four phases. Each phase produces a working, testable art
 | Configuration loader with TypeBox validation                       | [Security](spec-security.md), [Configuration](spec-configuration.md) | S12.1, S12.2, S17.1–S17.8 |
 | Structured JSON logger                                             | [System Prompt & Observability](spec-system-prompt.md)               | S14.6, S14.7              |
 | Security: command filter + env allowlist + path filter + redaction | [Security](spec-security.md)                                         | S11.1–S11.10              |
-| Tool system: registry, executor, built-in tools                    | [Agent Loop & Tools](spec-agent-loop.md)                             | S6.1–S6.14                |
+| Tool system: registry, executor, built-in tools                    | [Agent Loop & Tools](spec-agent-loop.md)                             | S6.1–S6.22                |
 | Agent loop with streaming                                          | [Agent Loop & Tools](spec-agent-loop.md)                             | S5.1–S5.8                 |
 | System prompt assembly                                             | [System Prompt & Observability](spec-system-prompt.md)               | S13.1–S13.7               |
 | Session manager (JSONL persistence + concurrency)                  | [Sessions](spec-sessions.md)                                         | S7.1–S7.12                |

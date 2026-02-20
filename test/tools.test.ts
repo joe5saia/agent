@@ -1,33 +1,12 @@
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
 import { Type } from "@sinclair/typebox";
-import { afterEach, describe, expect, it } from "vitest";
-import { executeTool, registerBuiltinTools, ToolRegistry } from "../src/tools/index.js";
-
-const tempDirectories: Array<string> = [];
-const homeDirectories: Array<string> = [];
-
-function createTempDirectory(): string {
-	const directory = mkdtempSync(join(tmpdir(), "agent-tools-test-"));
-	tempDirectories.push(directory);
-	return directory;
-}
-
-function createHomeDirectory(): string {
-	const directory = mkdtempSync(join(homedir(), ".agent-tools-test-"));
-	homeDirectories.push(directory);
-	return directory;
-}
-
-afterEach(() => {
-	for (const directory of tempDirectories.splice(0)) {
-		rmSync(directory, { force: true, recursive: true });
-	}
-	for (const directory of homeDirectories.splice(0)) {
-		rmSync(directory, { force: true, recursive: true });
-	}
-});
+import { describe, expect, it, vi } from "vitest";
+import {
+	discoveryBuiltinTools,
+	executeTool,
+	defaultInteractiveBuiltinTools,
+	registerBuiltinTools,
+	ToolRegistry,
+} from "../src/tools/index.js";
 
 describe("ToolRegistry", () => {
 	it("registers tools and rejects duplicates", () => {
@@ -85,25 +64,6 @@ describe("executeTool", () => {
 		expect(result.content).toMatch(/invalid arguments/i);
 	});
 
-	it("S6.3: truncates tool output at configured limit", async () => {
-		const registry = new ToolRegistry();
-		registry.register({
-			category: "read",
-			description: "Generate output.",
-			async execute(): Promise<string> {
-				return "x".repeat(500);
-			},
-			name: "generate",
-			outputLimitBytes: 32,
-			parameters: Type.Object({}),
-		});
-
-		const result = await executeTool(registry, "generate", {});
-
-		expect(result.isError).toBe(false);
-		expect(result.content).toContain("[output truncated]");
-	});
-
 	it("S6.4: returns timeout error when execution exceeds timeout", async () => {
 		const registry = new ToolRegistry();
 		registry.register({
@@ -134,271 +94,56 @@ describe("executeTool", () => {
 		expect(result.isError).toBe(true);
 		expect(result.content).toMatch(/timed out|aborted/i);
 	});
-
-	it("returns timeout error for non-cooperative tools", async () => {
-		const registry = new ToolRegistry();
-		registry.register({
-			category: "read",
-			description: "Never resolves and ignores cancellation.",
-			async execute(): Promise<string> {
-				return await new Promise<string>(() => {});
-			},
-			name: "hang",
-			parameters: Type.Object({}),
-			timeoutSeconds: 0.01,
-		});
-
-		const result = await executeTool(registry, "hang", {});
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/timed out/i);
-	});
 });
 
-describe("built-in tools", () => {
-	it("S6.5: blocks dangerous bash commands", async () => {
-		const root = createTempDirectory();
+describe("built-in tool registration", () => {
+	const builtinConfig = {
+		security: {
+			allowedEnv: ["PATH"],
+			allowedPaths: ["/tmp"],
+			blockedCommands: [],
+			deniedPaths: [],
+		},
+		tools: {
+			outputLimit: 10_000,
+			timeout: 5,
+		},
+	};
+
+	it("S6.15: keeps the default interactive built-in set", () => {
+		expect(defaultInteractiveBuiltinTools).toEqual(["read", "bash", "edit", "write"]);
+
 		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const result = await executeTool(registry, "bash", { command: "rm -rf /" });
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/blocked/i);
+		registerBuiltinTools(registry, builtinConfig);
+		const names = registry.list().map((tool) => tool.name);
+		for (const builtin of defaultInteractiveBuiltinTools) {
+			expect(names).toContain(builtin);
+		}
 	});
 
-	it("S6.6: bash env contains only allowlisted variables", async () => {
-		const root = createTempDirectory();
-		process.env["AGENT_TOOLS_ALLOW"] = "1";
-		process.env["AGENT_TOOLS_SECRET"] = "hidden";
-
+	it("S6.16: registers discovery tools", () => {
 		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH", "AGENT_TOOLS_ALLOW"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const command =
-			"node -e \"process.stdout.write((process.env.AGENT_TOOLS_ALLOW || 'x') + ':' + (process.env.AGENT_TOOLS_SECRET || ''))\"";
-		const result = await executeTool(registry, "bash", { command });
-
-		expect(result.isError).toBe(false);
-		expect(result.content.trim()).toBe("1:");
+		registerBuiltinTools(registry, builtinConfig);
+		const names = registry.list().map((tool) => tool.name);
+		for (const toolName of discoveryBuiltinTools) {
+			expect(names).toContain(toolName);
+		}
 	});
 
-	it("enforces output truncation for built-in bash tool", async () => {
-		const root = createTempDirectory();
+	it("registers legacy aliases and emits deprecation warnings on use", async () => {
+		const warnSpy = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
 		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 64,
-				timeout: 2,
-			},
+		registerBuiltinTools(registry, builtinConfig);
+		const names = registry.list().map((tool) => tool.name);
+		expect(names).toContain("read_file");
+		expect(names).toContain("write_file");
+		expect(names).toContain("list_directory");
+
+		await executeTool(registry, "list_directory", { path: "/tmp" });
+		expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining("list_directory"), {
+			code: "AGENT_TOOL_ALIAS_DEPRECATED",
+			type: "DeprecationWarning",
 		});
-
-		const result = await executeTool(registry, "bash", {
-			command: "node -e \"process.stdout.write('x'.repeat(1024))\"",
-		});
-
-		expect(result.isError).toBe(false);
-		expect(result.content).toContain("[output truncated]");
-	});
-
-	it("enforces timeout for built-in bash tool", async () => {
-		const root = createTempDirectory();
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 1,
-			},
-		});
-
-		const result = await executeTool(registry, "bash", {
-			command: "node -e \"setTimeout(() => process.stdout.write('done'), 5000)\"",
-		});
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/timed out/i);
-	});
-
-	it("S6.10: read_file rejects targets outside allowed paths", async () => {
-		const root = createTempDirectory();
-		const outside = createTempDirectory();
-		const outsideFile = join(outside, "outside.txt");
-		mkdirSync(root, { recursive: true });
-		mkdirSync(outside, { recursive: true });
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const result = await executeTool(registry, "read_file", { path: outsideFile });
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/outside allowed paths/i);
-	});
-
-	it("S6.11: write_file denies denied_paths even under allowed path", async () => {
-		const root = createTempDirectory();
-		const denied = join(root, "private");
-		mkdirSync(denied, { recursive: true });
-		const target = join(denied, "secret.txt");
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [denied],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const result = await executeTool(registry, "write_file", {
-			content: "top secret",
-			path: target,
-		});
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/denied/i);
-	});
-
-	it("S6.12: read_file rejects symlink escape outside allowed paths", async () => {
-		const root = createTempDirectory();
-		const outside = createTempDirectory();
-		const outsideFile = join(outside, "secret.txt");
-		mkdirSync(root, { recursive: true });
-		mkdirSync(outside, { recursive: true });
-		writeFileSync(outsideFile, "secret", "utf8");
-
-		const symlinkPath = join(root, "linked.txt");
-		symlinkSync(outsideFile, symlinkPath);
-
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const result = await executeTool(registry, "read_file", { path: symlinkPath });
-
-		expect(result.isError).toBe(true);
-		expect(result.content).toMatch(/outside allowed paths/i);
-	});
-
-	it("writes and reads files within allowed paths", async () => {
-		const root = createTempDirectory();
-		const target = join(root, "hello.txt");
-		mkdirSync(root, { recursive: true });
-
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [root],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const writeResult = await executeTool(registry, "write_file", {
-			content: "hello world",
-			path: target,
-		});
-		expect(writeResult.isError).toBe(false);
-		expect(readFileSync(target, "utf8")).toBe("hello world");
-
-		const readResult = await executeTool(registry, "read_file", { path: target });
-		expect(readResult).toEqual({ content: "hello world", isError: false });
-	});
-
-	it("expands and uses tilde paths for file operations", async () => {
-		const root = createHomeDirectory();
-		const relativeRoot = root.startsWith(`${homedir()}/`) ? root.slice(homedir().length + 1) : "";
-		const tildeRoot = `~/${relativeRoot}`;
-		const target = `${tildeRoot}/hello.txt`;
-
-		const registry = new ToolRegistry();
-		registerBuiltinTools(registry, {
-			security: {
-				allowedEnv: ["PATH"],
-				allowedPaths: [tildeRoot],
-				blockedCommands: [],
-				deniedPaths: [],
-			},
-			tools: {
-				outputLimit: 1000,
-				timeout: 2,
-			},
-		});
-
-		const writeResult = await executeTool(registry, "write_file", {
-			content: "hello tilde",
-			path: target,
-		});
-		expect(writeResult.isError).toBe(false);
-
-		const readResult = await executeTool(registry, "read_file", { path: target });
-		expect(readResult).toEqual({ content: "hello tilde", isError: false });
-
-		const listResult = await executeTool(registry, "list_directory", { path: tildeRoot });
-		expect(listResult.isError).toBe(false);
-		expect(listResult.content).toContain("hello.txt");
+		warnSpy.mockRestore();
 	});
 });

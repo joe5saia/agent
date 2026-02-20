@@ -141,7 +141,7 @@ contextTokens > contextWindow - reserveTokens
 
 1. **Find cut point.** Walk backward from the newest message, accumulating estimated tokens. Stop when accumulated tokens ≥ `keepRecentTokens`. The cut point is the nearest valid boundary at or after that entry.
 2. **Valid cut points.** Never cut in the middle of a tool call / tool result pair. Valid cut points are: user messages, assistant messages (without pending tool results), and compaction records.
-3. **Extract file operations.** Scan tool calls in messages being summarized for file operations (`read_file` → `readFiles`, `write_file` → `modifiedFiles`). If a previous compaction exists, merge its `readFiles` and `modifiedFiles` sets (cumulative tracking). Files that appear in both `readFiles` and `modifiedFiles` are kept only in `modifiedFiles`.
+3. **Extract file operations.** Scan tool calls in messages being summarized for file operations (`read` → `readFiles`, `write`/`edit` → `modifiedFiles`). During migration, treat `read_file` as `read`, `write_file` as `write`, and `list_directory` as `ls`. If a previous compaction exists, merge its `readFiles` and `modifiedFiles` sets (cumulative tracking). Files that appear in both `readFiles` and `modifiedFiles` are kept only in `modifiedFiles`.
 4. **Generate structured summary.** Send the messages being compacted to the LLM with the summarization prompt (§7.5.4). If a previous compaction exists, use the **update prompt** instead, which instructs the LLM to merge new information into the existing summary.
 5. **Append compaction record.** Write a `compaction` record to the JSONL file with:
    - `firstKeptSeq` — the `seq` of the first message to keep

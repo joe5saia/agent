@@ -212,7 +212,7 @@ export default defineConfig({
 ```
 test/
 ├── agent-loop.test.ts       # Core loop tests (S5.1-S5.6)
-├── tools.test.ts            # Tool system tests (S6.1-S6.7)
+├── tools*.test.ts           # Tool system tests (S6.1-S6.22)
 ├── sessions.test.ts         # Session management tests (S7.1-S7.7)
 ├── cron.test.ts             # Cron service tests (S8.1-S8.8)
 ├── workflows.test.ts        # Workflow engine tests (S9.1-S9.8)

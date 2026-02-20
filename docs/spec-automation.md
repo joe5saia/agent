@@ -27,7 +27,7 @@ jobs:
     prompt: "Generate the daily status report and post it to Slack"
     enabled: true
     policy:
-      allowed_tools: ["read_file", "list_directory", "bash", "workflow_daily_report"]
+      allowed_tools: ["read", "ls", "bash", "workflow_daily_report"]
       max_iterations: 10
 
   - id: healthcheck
@@ -35,7 +35,7 @@ jobs:
     prompt: "Run the healthcheck workflow"
     enabled: true
     policy:
-      allowed_tools: ["workflow_healthcheck", "read_file", "bash"]
+      allowed_tools: ["workflow_healthcheck", "read", "bash"]
       max_iterations: 5
 ```
 

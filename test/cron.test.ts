@@ -168,6 +168,62 @@ describe("cron service", () => {
 		expect(seenToolSets.some((set) => set.includes("admin_tool"))).toBe(false);
 	});
 
+	it("supports legacy tool aliases in allowedTools policy during migration", async () => {
+		const sessionManager = new SessionManager({
+			defaultModel: "gpt-test",
+			sessionsDir: createTempSessionsDir(),
+		});
+		const toolRegistry = new ToolRegistry();
+		toolRegistry.register({
+			category: "read",
+			description: "Read tool.",
+			execute: async () => "",
+			name: "read",
+			parameters: Type.Object({}),
+		});
+		toolRegistry.register({
+			category: "write",
+			description: "Write tool.",
+			execute: async () => "",
+			name: "write",
+			parameters: Type.Object({}),
+		});
+
+		const seenToolSets: Array<Array<string>> = [];
+		const service = new CronService({
+			defaultMaxIterations: 3,
+			logger: createLoggerSink([]),
+			model: createModel(),
+			runAgentLoop: async (messages, tools) => {
+				seenToolSets.push(
+					tools
+						.list()
+						.map((tool) => tool.name)
+						.sort((left, right) => left.localeCompare(right)),
+				);
+				return [...messages, assistantMessage("ok")];
+			},
+			sessionManager,
+			systemPromptBuilder: () => "system",
+			toolRegistry,
+		});
+
+		service.start([
+			{
+				enabled: true,
+				id: "alias-policy",
+				policy: { allowedTools: ["read_file"] },
+				prompt: "run",
+				schedule: "*/1 * * * * *",
+			},
+		]);
+		await sleep(1200);
+		service.stop();
+
+		expect(seenToolSets.some((set) => set.join(",") === "read")).toBe(true);
+		expect(seenToolSets.some((set) => set.includes("write"))).toBe(false);
+	});
+
 	it("S8.12: tracks consecutive failures and resets on success", async () => {
 		const sessionManager = new SessionManager({
 			defaultModel: "gpt-test",

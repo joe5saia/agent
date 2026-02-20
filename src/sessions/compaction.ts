@@ -1,3 +1,4 @@
+import { normalizeToolName } from "../tools/tool-names.js";
 import type { SessionRecord } from "./types.js";
 
 export interface CompactionRunConfig {
@@ -110,10 +111,11 @@ function extractFileSets(messages: Array<Extract<SessionRecord, { recordType: "m
 			if (path === undefined) {
 				continue;
 			}
-			if (block.name === "read_file") {
+			const normalizedToolName = normalizeToolName(block.name);
+			if (normalizedToolName === "read") {
 				readFiles.add(path);
 			}
-			if (block.name === "write_file") {
+			if (normalizedToolName === "write" || normalizedToolName === "edit") {
 				modifiedFiles.add(path);
 			}
 		}

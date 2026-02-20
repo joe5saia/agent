@@ -5,6 +5,7 @@ import type { Logger } from "../logging/index.js";
 import { toSessionAppendInput, type SessionManager } from "../sessions/index.js";
 import type { ToolRegistry } from "../tools/index.js";
 import { ToolRegistry as RuntimeToolRegistry } from "../tools/index.js";
+import { normalizeToolName } from "../tools/tool-names.js";
 import type { CronJobConfig, CronJobStatus } from "./types.js";
 
 interface CronJobRuntime {
@@ -32,20 +33,24 @@ function cronSessionName(jobId: string, now: Date = new Date()): string {
 
 function filterToolsForJob(baseRegistry: ToolRegistry, job: CronJobConfig): ToolRegistry {
 	const filtered = new RuntimeToolRegistry();
-	const allowedSet =
-		job.policy?.allowedTools === undefined ? undefined : new Set(job.policy.allowedTools);
+	const allowedSet = job.policy?.allowedTools;
+	const normalizedAllowed =
+		allowedSet === undefined
+			? undefined
+			: new Set(allowedSet.map((entry) => normalizeToolName(entry)));
 
 	for (const tool of baseRegistry.list()) {
 		if (tool.category === "admin") {
 			continue;
 		}
-		if (allowedSet === undefined) {
+		if (normalizedAllowed === undefined) {
 			if (tool.category === "read") {
 				filtered.register(tool);
 			}
 			continue;
 		}
-		if (allowedSet.has(tool.name)) {
+		const normalizedName = normalizeToolName(tool.name);
+		if (normalizedAllowed.has(normalizedName) || normalizedAllowed.has(tool.name)) {
 			filtered.register(tool);
 		}
 	}

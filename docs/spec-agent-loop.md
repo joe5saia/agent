@@ -136,24 +136,32 @@ interface AgentTool {
 
 **Tool categories** control permission behavior:
 
-| Category | Examples                                           | Interactive                  | Cron                                            |
-| -------- | -------------------------------------------------- | ---------------------------- | ----------------------------------------------- |
-| `read`   | `read_file`, `list_directory`, `kubectl_get`       | Auto-approved                | Auto-approved                                   |
-| `write`  | `write_file`, `bash` (non-destructive)             | Auto-approved                | Allowed only if explicitly listed in job policy |
-| `admin`  | `bash` (destructive), `write_file` to system paths | Requires user approval in UI | Blocked by default                              |
+| Category | Examples                                          | Interactive                  | Cron                                            |
+| -------- | ------------------------------------------------- | ---------------------------- | ----------------------------------------------- |
+| `read`   | `read`, `grep`, `find`, `ls`, `kubectl_get`       | Auto-approved                | Auto-approved                                   |
+| `write`  | `write`, `edit`, `bash` (non-destructive)         | Auto-approved                | Allowed only if explicitly listed in job policy |
+| `admin`  | Destructive `bash`, privileged deployment actions | Requires user approval in UI | Blocked by default                              |
 
 TypeBox provides both the JSON Schema (sent to the LLM to describe the tool) and the TypeScript type (for compile-time safety in the execute function) from a single definition.
 
 ### 6.2 Built-in Tools
 
-The agent ships with a minimal set of built-in tools:
+The agent ships with Pi-style built-in tools.
 
-| Tool             | Category | Description                                                                           |
-| ---------------- | -------- | ------------------------------------------------------------------------------------- |
-| `bash`           | `write`  | Execute a shell command. Output is truncated at a configurable limit (default 200KB). |
-| `read_file`      | `read`   | Read the contents of a file. Path must be within allowed paths.                       |
-| `write_file`     | `write`  | Write content to a file. Path must be within allowed paths.                           |
-| `list_directory` | `read`   | List files and directories at a given path. Path must be within allowed paths.        |
+- Default interactive tool set: `read`, `bash`, `edit`, `write`.
+- Additional built-ins for exploration and read-only flows: `grep`, `find`, `ls`.
+- Migration support: legacy names `read_file`, `write_file`, and `list_directory` remain as
+  aliases for one compatibility window, then are removed.
+
+| Tool    | Category | Description                                                                                                             |
+| ------- | -------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `read`  | `read`   | Read text files with optional `offset`/`limit` pagination and truncation notices. Supports image reads when applicable. |
+| `write` | `write`  | Write UTF-8 text to disk (creating parent directories when needed).                                                     |
+| `edit`  | `write`  | Replace text in a file using exact-match semantics with guarded fuzzy fallback, uniqueness checks, and diff output.     |
+| `bash`  | `write`  | Execute shell commands with streamed output. Tail output is truncated with a pointer to full output when needed.        |
+| `grep`  | `read`   | Search file contents under allowed paths with regex/literal pattern support.                                            |
+| `find`  | `read`   | Discover files and directories under allowed paths (optionally filtered by glob/pattern).                               |
+| `ls`    | `read`   | List directory entries under allowed paths with stable, deterministic ordering.                                         |
 
 ### 6.3 CLI Tool Registration
 
@@ -247,13 +255,15 @@ tools:
 
 **Additional safety measures:**
 
-- **Output truncation** — tool output is capped at a configurable limit (default 200KB) to prevent context explosion.
+- **Output truncation** — tool output is capped to prevent context explosion. For `read`, return
+  head-truncated output with continuation guidance (`offset=<n>`). For `bash`, return tail-truncated
+  output and include the path to the temp file containing the full output when truncation occurs.
 - **Dangerous command blocklist** — commands like `rm`, `sudo`, `shutdown`, `reboot`, `mkfs`, `dd`, `chmod 777` are blocked for the `bash` tool regardless of category. The blocklist is a defense-in-depth layer, not the primary protection (structured execution is). See [Security](spec-security.md#112-runtime-safeguards) for details.
 - **Timeout** — tool execution has a configurable timeout (default 120s).
 
 **Filesystem access boundaries:**
 
-Built-in file tools (`read_file`, `write_file`, `list_directory`) enforce path boundaries:
+Built-in filesystem tools (`read`, `write`, `edit`, `grep`, `find`, `ls`) enforce path boundaries:
 
 ```yaml
 # ~/.agent/config.yaml (relevant section)
@@ -278,15 +288,23 @@ security:
 
 - **S6.1**: Tool with valid parameters executes and returns output.
 - **S6.2**: Tool with invalid parameters (fails TypeBox validation) returns a validation error to the LLM.
-- **S6.3**: Tool exceeding output limit truncates output with a notice.
+- **S6.3**: `read` tool output exceeding limits is truncated with an actionable continuation notice (`offset=<n>`).
 - **S6.4**: Tool exceeding timeout is killed and returns a timeout error.
 - **S6.5**: Dangerous command (`rm -rf /`) is blocked and returns a rejection message.
 - **S6.6**: Subprocess environment contains only allowlisted variables — no API keys, tokens, or secrets leak.
 - **S6.7**: CLI tool defined in YAML config is registered and callable by the agent.
 - **S6.8**: CLI tool executes with `spawn(cmd, args, { shell: false })` — shell metacharacters in arguments are treated as literal strings.
 - **S6.9**: Template injection attempt via parameter value (e.g., `resource: "pods; rm -rf ~"`) is rejected by parameter validation (enum/pattern).
-- **S6.10**: `read_file` on a path outside `allowed_paths` returns a permission error.
-- **S6.11**: `write_file` on a path in `denied_paths` returns a permission error even if it matches `allowed_paths`.
+- **S6.10**: `read` on a path outside `allowed_paths` returns a permission error.
+- **S6.11**: `write`/`edit` on a path in `denied_paths` returns a permission error even if it matches `allowed_paths`.
 - **S6.12**: Symlink pointing outside `allowed_paths` is rejected.
 - **S6.13**: Tool-specific environment variables declared in the tool definition are passed to the subprocess.
-- **S6.14**: `admin`-category tool in cron session is blocked unless explicitly listed in job policy.
+- **S6.14**: Non-`read` category tools in cron are unavailable unless explicitly listed in job policy.
+- **S6.15**: Built-in default interactive tool set is `read`, `bash`, `edit`, `write`.
+- **S6.16**: `grep`, `find`, and `ls` are registered and callable when enabled by runtime policy.
+- **S6.17**: `grep` is restricted to allowed paths and rejects denied/out-of-scope paths.
+- **S6.18**: `find` is restricted to allowed paths and rejects denied/out-of-scope paths.
+- **S6.19**: `ls` is restricted to allowed paths and rejects denied/out-of-scope paths.
+- **S6.20**: `bash` output exceeding limit is tail-truncated and includes a full-output temp file path.
+- **S6.21**: `edit` rejects non-unique matches and prompts for more context.
+- **S6.22**: `edit` success result includes a unified diff summary.

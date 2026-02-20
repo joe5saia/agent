@@ -157,6 +157,15 @@ composerNode.addEventListener("submit", (event) => {
 	);
 });
 
+promptNode.addEventListener("keydown", (event) => {
+	if (event.key !== "Enter" || event.isComposing || !event.metaKey) {
+		return;
+	}
+
+	event.preventDefault();
+	composerNode.requestSubmit();
+});
+
 cancelButtonNode.addEventListener("click", () => {
 	if (state.ws === null || state.activeRunId === "" || state.activeSessionId === "") {
 		return;

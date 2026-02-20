@@ -32,7 +32,7 @@ describe("session compaction", () => {
 				{
 					arguments: { path: "src/app.ts" },
 					id: "tc1",
-					name: "read_file",
+					name: "read",
 					type: "toolCall",
 				},
 			]),
@@ -102,7 +102,7 @@ describe("session compaction", () => {
 				{
 					arguments: { path: "a" },
 					id: "call-1",
-					name: "read_file",
+					name: "read",
 					type: "toolCall",
 				},
 			]),
@@ -133,7 +133,7 @@ describe("session compaction", () => {
 				{
 					arguments: { path: "src/new.ts" },
 					id: "tc2",
-					name: "write_file",
+					name: "edit",
 					type: "toolCall",
 				},
 			]),
@@ -174,5 +174,52 @@ describe("session compaction", () => {
 		expect(mergedRecord?.modifiedFiles).toContain("src/shared.ts");
 		expect(mergedRecord?.readFiles).toContain("src/old-read.ts");
 		expect(mergedRecord?.readFiles).not.toContain("src/shared.ts");
+	});
+
+	it("normalizes legacy file tool aliases during compaction", async () => {
+		const records: Array<SessionRecord> = [
+			message(1, "assistant", [
+				{
+					arguments: { path: "src/legacy-read.ts" },
+					id: "tc1",
+					name: "read_file",
+					type: "toolCall",
+				},
+			]),
+			message(2, "assistant", [
+				{
+					arguments: { path: "src/legacy-write.ts" },
+					id: "tc2",
+					name: "write_file",
+					type: "toolCall",
+				},
+				{
+					arguments: { path: "src/ignored-dir.ts" },
+					id: "tc3",
+					name: "list_directory",
+					type: "toolCall",
+				},
+			]),
+			message(3, "user", [{ text: "tail", type: "text" }]),
+		];
+		let compacted: Extract<SessionRecord, { recordType: "compaction" }> | undefined;
+
+		await compactSession(
+			{ keepRecentTokens: 1, reserveTokens: 1 },
+			{
+				appendRecord: async (record) => {
+					compacted = record;
+				},
+				estimateTokens: () => 50,
+				records,
+				sessionId: "01HXXXXXXXXXXXXXXXXXXXXXXX",
+				summarize: async () => "## Goal\nNormalized",
+			},
+		);
+
+		expect(compacted?.readFiles).toContain("src/legacy-read.ts");
+		expect(compacted?.modifiedFiles).toContain("src/legacy-write.ts");
+		expect(compacted?.readFiles).not.toContain("src/ignored-dir.ts");
+		expect(compacted?.modifiedFiles).not.toContain("src/ignored-dir.ts");
 	});
 });

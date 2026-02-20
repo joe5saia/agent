@@ -4,6 +4,9 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-20:** Completed Pi tool parity implementation across tasks P1-P5: added canonical built-ins (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`), compatibility aliases with deprecation warnings and removal milestone, cron policy alias normalization, compaction tool-name normalization, and expanded tool/cron/compaction tests. Verification: `npm run check`, `npm test`, `npm test -- tools`, `npm test -- cron`, `npm test -- sessions`, `npm test -- compaction`.
+- **2026-02-20:** Updated tool specs for Pi-style built-ins (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`) and migration aliases in `docs/spec-agent-loop.md`, `docs/spec-automation.md`, `docs/spec-sessions.md`, and `docs/spec-project-structure.md`.
+- **2026-02-20:** Updated chat composer keyboard behavior so plain Enter inserts a newline and Cmd+Enter submits the message (`public/app.js`).
 - **2026-02-20:** Implemented architecture hardening fixes for all findings in `docs/architecture-review-v1.md`: metadata-based session sequencing and cached context rebuild path, async non-blocking logger with decoupled rotation checks, runtime config provider with graceful host/port restart on reload, WS queue backpressure/cleanup hardening, cached prompt/tool schema assembly, shared session message codec across CLI/WS/cron/workflows, and side-effect-free session GET reads. Verification: `npm run check` and `npm test`.
 - **2026-02-20:** Completed V1 architecture hardening review and documented prioritized findings in `docs/architecture-review-v1.md` (structure, module coupling, reload semantics, and performance bottlenecks). Updated `docs/README.md` index and `docs/known-bugs.md` with newly identified unresolved defects.
 - **2026-02-19:** Added `docs/onboarding-setup.md` with two onboarding tracks (dedicated VM and personal laptop), including Claude OAuth/Codex token setup and Docker Compose bootstrapping. Updated `docs/README.md` index.
@@ -24,6 +27,134 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 - [System Prompt & Observability](spec-system-prompt.md) — prompt assembly, logging, error handling
 - [Web Interface](spec-web-interface.md) — HTTP server, REST API, WebSocket
 - [Automation](spec-automation.md) — cron and workflows
+
+---
+
+## Planned Work: Pi Tool Parity
+
+**Goal:** Replace legacy built-in tools with Pi-style behavior and naming, while keeping a short
+migration window for compatibility aliases.
+
+### Task P1 — Tool Surface + Registration Migration
+
+**Status:** Completed (2026-02-20)
+
+**Files to modify:**
+
+- `src/tools/index.ts`
+- `src/tools/types.ts` (if details payload typing must expand)
+- `src/agent/system-prompt.ts` (if tool docs need richer per-tool usage notes)
+- `test/tools.test.ts`
+
+**Behavior:**
+
+- Register Pi-style built-in names: `read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`.
+- Keep legacy aliases `read_file`, `write_file`, `list_directory` for one compatibility window.
+- Preserve default interactive built-in set as `read`, `bash`, `edit`, `write`.
+- Ensure cron/read-only policies can include `grep`, `find`, and `ls`.
+
+**Acceptance criteria:** S6.1, S6.2, S6.15, S6.16, S8.9, S8.10
+
+---
+
+### Task P2 — Read/Write/Edit Tool Implementation
+
+**Status:** Completed (2026-02-20)
+
+**Files to modify/create:**
+
+- `src/tools/builtin/read.ts` (new)
+- `src/tools/builtin/write.ts` (new)
+- `src/tools/builtin/edit.ts` (new)
+- `src/tools/builtin/read-file.ts` (compat alias wrapper)
+- `src/tools/builtin/write-file.ts` (compat alias wrapper)
+- `test/tools-read.test.ts` (new)
+- `test/tools-edit.test.ts` (new)
+
+**Behavior:**
+
+- `read` supports `path`, optional `offset`, optional `limit`, and actionable truncation messages.
+- `write` writes UTF-8 content with parent-directory creation and path policy enforcement.
+- `edit` performs exact replacement with guarded fuzzy fallback, enforces uniqueness, and returns
+  diff details.
+- All file-modifying and file-reading operations enforce `allowed_paths`/`denied_paths` and
+  symlink boundary checks.
+
+**Acceptance criteria:** S6.3, S6.10, S6.11, S6.12, S6.21, S6.22
+
+---
+
+### Task P3 — Bash Tool Parity
+
+**Status:** Completed (2026-02-20)
+
+**Files to modify/create:**
+
+- `src/tools/builtin/bash.ts`
+- `test/tools-bash.test.ts` (new)
+
+**Behavior:**
+
+- Keep command blocklist and environment allowlist enforcement.
+- Add streamed output updates during execution.
+- On large output, tail-truncate tool result and persist full output to a temp file; include file
+  path in result details.
+- Maintain timeout and non-zero exit handling semantics.
+
+**Acceptance criteria:** S6.4, S6.5, S6.6, S6.13, S6.20
+
+---
+
+### Task P4 — Discovery Tools (`grep`, `find`, `ls`)
+
+**Status:** Completed (2026-02-20)
+
+**Files to modify/create:**
+
+- `src/tools/builtin/grep.ts` (new)
+- `src/tools/builtin/find.ts` (new)
+- `src/tools/builtin/ls.ts` (new)
+- `src/tools/builtin/list-directory.ts` (compat alias wrapper)
+- `test/tools-discovery.test.ts` (new)
+
+**Behavior:**
+
+- `grep` searches content under scoped roots with deterministic, parseable output.
+- `find` discovers files/directories under scoped roots with optional glob filtering.
+- `ls` lists directory entries with deterministic ordering.
+- All discovery tools enforce path boundaries consistently.
+
+**Acceptance criteria:** S6.17, S6.18, S6.19
+
+---
+
+### Task P5 — Integration, Migration Removal Plan, and Verification
+
+**Status:** Completed (2026-02-20)
+
+**Files to modify:**
+
+- `src/cron/service.ts` (if default read-tool filtering needs explicit inclusion updates)
+- `src/sessions/compaction.ts` (tool-name normalization for file operation extraction)
+- `test/cron.test.ts`
+- `test/sessions.test.ts`
+
+**Behavior:**
+
+- Normalize tool names for compaction metadata (`read_file`/`write_file`/`list_directory` aliases).
+- Ensure cron `allowed_tools` policies work with new tool names and aliases during migration.
+- Add deprecation log warnings for legacy aliases and define a removal milestone.
+
+**Acceptance criteria:** S7.6, S8.9, S8.10, S8.11
+
+---
+
+### Verification Gate
+
+- Run `npm run check`.
+- Run `npm test`.
+- Run focused tests while iterating: `npm test -- tools`, `npm test -- cron`, `npm test -- sessions`.
+- Merge only when all S6.1-S6.22 scenarios are covered by automated tests and green in CI.
 
 ---
 
@@ -966,20 +1097,20 @@ Phase 4 (Hardening)
 
 Every spec test scenario ID is mapped to a task. Cross-reference:
 
-| Scenario Range | Task(s)       | Spec Document                                              |
-| -------------- | ------------- | ---------------------------------------------------------- |
-| S5.1–S5.8      | 1.8           | [Agent Loop](spec-agent-loop.md#53-test-scenarios)         |
-| S6.1–S6.14     | 1.4, 1.5, 4.2 | [Tool System](spec-agent-loop.md#65-test-scenarios)        |
-| S7.1–S7.18     | 1.6, 3.6      | [Sessions](spec-sessions.md#77-test-scenarios)             |
-| S8.1–S8.13     | 3.1, 3.2      | [Cron](spec-automation.md#85-test-scenarios)               |
-| S9.1–S9.13     | 3.3, 3.4, 3.5 | [Workflows](spec-automation.md#97-test-scenarios)          |
-| S10.1–S10.12   | 2.2, 2.3      | [Web Interface](spec-web-interface.md#106-test-scenarios)  |
-| S11.1–S11.10   | 1.3, 2.1      | [Security](spec-security.md#115-test-scenarios)            |
-| S12.1–S12.5    | 1.1, 1.6, 4.1 | [Storage](spec-security.md#123-test-scenarios)             |
-| S13.1–S13.7    | 1.7           | [System Prompt](spec-system-prompt.md#135-test-scenarios)  |
-| S14.1–S14.10   | 1.2, 2.6, 3.7 | [Logging](spec-system-prompt.md#147-test-scenarios)        |
-| S15.1–S15.9    | 2.5           | [Error Handling](spec-system-prompt.md#156-test-scenarios) |
-| S16.1–S16.7    | 2.1, 2.3, 2.8 | [Web Framework](spec-web-interface.md#164-test-scenarios)  |
-| S17.1–S17.8    | 1.1, 4.1      | [Configuration](spec-configuration.md#174-test-scenarios)  |
-| S18.1–S18.9    | 2.4           | [Session Naming](spec-configuration.md#185-test-scenarios) |
-| S21.1–S21.4    | 4.4, 4.5, 4.6 | [Deployment](spec-project-structure.md#213-test-scenarios) |
+| Scenario Range | Task(s)             | Spec Document                                              |
+| -------------- | ------------------- | ---------------------------------------------------------- |
+| S5.1–S5.8      | 1.8                 | [Agent Loop](spec-agent-loop.md#53-test-scenarios)         |
+| S6.1–S6.22     | P1, P2, P3, P4, 1.5 | [Tool System](spec-agent-loop.md#65-test-scenarios)        |
+| S7.1–S7.18     | 1.6, 3.6            | [Sessions](spec-sessions.md#77-test-scenarios)             |
+| S8.1–S8.13     | 3.1, 3.2            | [Cron](spec-automation.md#85-test-scenarios)               |
+| S9.1–S9.13     | 3.3, 3.4, 3.5       | [Workflows](spec-automation.md#97-test-scenarios)          |
+| S10.1–S10.12   | 2.2, 2.3            | [Web Interface](spec-web-interface.md#106-test-scenarios)  |
+| S11.1–S11.10   | 1.3, 2.1            | [Security](spec-security.md#115-test-scenarios)            |
+| S12.1–S12.5    | 1.1, 1.6, 4.1       | [Storage](spec-security.md#123-test-scenarios)             |
+| S13.1–S13.7    | 1.7                 | [System Prompt](spec-system-prompt.md#135-test-scenarios)  |
+| S14.1–S14.10   | 1.2, 2.6, 3.7       | [Logging](spec-system-prompt.md#147-test-scenarios)        |
+| S15.1–S15.9    | 2.5                 | [Error Handling](spec-system-prompt.md#156-test-scenarios) |
+| S16.1–S16.7    | 2.1, 2.3, 2.8       | [Web Framework](spec-web-interface.md#164-test-scenarios)  |
+| S17.1–S17.8    | 1.1, 4.1            | [Configuration](spec-configuration.md#174-test-scenarios)  |
+| S18.1–S18.9    | 2.4                 | [Session Naming](spec-configuration.md#185-test-scenarios) |
+| S21.1–S21.4    | 4.4, 4.5, 4.6       | [Deployment](spec-project-structure.md#213-test-scenarios) |
