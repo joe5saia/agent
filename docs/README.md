@@ -11,6 +11,7 @@ Project documentation for all contributors and agents. Files in this directory s
 | [deployment-guide.md](deployment-guide.md)             | VM deployment, systemd service setup, Tailscale exposure, operations   |
 | [implementation-plan.md](implementation-plan.md)       | Ordered build plan with tasks, deliverables, and acceptance criteria   |
 | [known-bugs.md](known-bugs.md)                         | Open correctness/security regressions tracked for follow-up fixes      |
+| [onboarding-setup.md](onboarding-setup.md)             | New-user setup for Claude/Codex tokens and Docker Compose on VM/laptop |
 | [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                |
 | [spec-automation.md](spec-automation.md)               | Cron scheduled triggers and structured workflows (§8–§9)               |
 | [spec-configuration.md](spec-configuration.md)         | Configuration validation and session naming UX (§17–§18)               |

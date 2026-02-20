@@ -4,6 +4,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-19:** Added `docs/onboarding-setup.md` with two onboarding tracks (dedicated VM and personal laptop), including Claude OAuth/Codex token setup and Docker Compose bootstrapping. Updated `docs/README.md` index.
 - **2026-02-18:** Completed Phase 4 hardening delivery (config hot-reload, execution limit enforcement, token metrics tracking, systemd unit, integration tests, and deployment docs). Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Completed Phase 3 automation delivery (cron service and API, workflow engine/tooling/API, session compaction, and log rotation) with full test coverage. Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Resolved a strict typing regression in `src/sessions/manager.ts` so reconstructed assistant session messages now use a valid `Api` value and avoid unsafe type assertions. Verification: `npm run tsc` passes.
