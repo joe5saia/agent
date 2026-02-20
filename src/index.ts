@@ -3,14 +3,21 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { getModels, getProviders, type Api, type Message, type Model } from "@mariozechner/pi-ai";
-import { agentLoop, buildSystemPrompt } from "./agent/index.js";
+import {
+	agentLoop,
+	buildSystemPrompt,
+	buildSystemPromptFromPrepared,
+	prepareSystemPrompt,
+	type PreparedSystemPrompt,
+} from "./agent/index.js";
 import { resolveApiKey } from "./auth/index.js";
 import { loadConfig, watchConfig, type AgentConfig } from "./config/index.js";
-import { loadCronJobs, CronService } from "./cron/index.js";
+import { loadCronJobs, CronService, type CronJobConfig } from "./cron/index.js";
 import { createLogger } from "./logging/index.js";
-import { startServer } from "./server/index.js";
-import { SessionManager } from "./sessions/index.js";
-import { loadCliTools, registerBuiltinTools, ToolRegistry } from "./tools/index.js";
+import { RuntimeConfigProvider } from "./runtime/config-provider.js";
+import { startServer, type RunningServer } from "./server/index.js";
+import { assistantText, SessionManager, toSessionAppendInput } from "./sessions/index.js";
+import { loadCliTools, registerBuiltinTools, ToolRegistry, type AgentTool } from "./tools/index.js";
 import { WorkflowEngine, loadWorkflows } from "./workflows/index.js";
 
 interface Paths {
@@ -96,97 +103,22 @@ function readOptionalPromptFromStdin(): string | undefined {
 }
 
 /**
- * Converts an in-memory pi-ai message to a session append payload.
+ * Builds the full runtime tool set from built-in, CLI, and workflow-backed tools.
  */
-function toSessionAppendInput(message: Message):
-	| {
-			content: Array<
-				| { text: string; type: "text" }
-				| { arguments: Record<string, unknown>; id: string; name: string; type: "toolCall" }
-			>;
-			isError?: boolean;
-			role: "assistant" | "toolResult" | "user";
-			toolCallId?: string;
-	  }
-	| undefined {
-	if (message.role === "user") {
-		const blocks = (
-			Array.isArray(message.content)
-				? message.content
-				: [{ text: message.content, type: "text" as const }]
-		)
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return { content: blocks, role: "user" };
-	}
-
-	if (message.role === "assistant") {
-		const blocks = message.content
-			.filter(
-				(entry) => entry.type === "text" || entry.type === "toolCall" || entry.type === "thinking",
-			)
-			.map((entry) => {
-				if (entry.type === "toolCall") {
-					return {
-						arguments: entry.arguments,
-						id: entry.id,
-						name: entry.name,
-						type: "toolCall" as const,
-					};
-				}
-				if (entry.type === "thinking") {
-					return { text: entry.thinking, type: "text" as const };
-				}
-				return { text: entry.text, type: "text" as const };
-			});
-		return { content: blocks, role: "assistant" };
-	}
-
-	if (message.role === "toolResult") {
-		const blocks = message.content
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return {
-			content: blocks,
-			isError: message.isError,
-			role: "toolResult",
-			toolCallId: message.toolCallId,
-		};
-	}
-
-	return undefined;
-}
-
-/**
- * Renders assistant text content for CLI output.
- */
-function assistantText(message: Extract<Message, { role: "assistant" }>): string {
-	return message.content
-		.filter((entry) => entry.type === "text")
-		.map((entry) => entry.text)
-		.join("\n")
-		.trim();
-}
-
-/**
- * Applies built-in, CLI, and workflow-backed tools to the active registry.
- */
-function reloadRegistry(
-	registry: ToolRegistry,
-	state: RuntimeState,
+function buildRuntimeTools(
+	config: AgentConfig,
 	paths: Paths,
 	workflowEngine: WorkflowEngine,
-): number {
+): Array<AgentTool> {
 	const stagedRegistry = new ToolRegistry();
-	registerBuiltinTools(stagedRegistry, state.config);
+	registerBuiltinTools(stagedRegistry, config);
 	for (const cliTool of loadCliTools(paths.toolsPath, {
-		allowedEnv: state.config.security.allowedEnv,
+		allowedEnv: config.security.allowedEnv,
 	})) {
 		stagedRegistry.register(cliTool);
 	}
 	stagedRegistry.registerWorkflowTools(workflowEngine.toTools());
-	registry.replaceAll(stagedRegistry.list());
-	return registry.list().length;
+	return stagedRegistry.list();
 }
 
 /**
@@ -214,7 +146,7 @@ async function runPromptMode(state: RuntimeState, paths: Paths, prompt: string):
 		role: "user",
 	});
 
-	const contextMessages = await sessionManager.buildContext(session.id);
+	const contextMessages = await sessionManager.buildContextForRun(session.id);
 	const systemPrompt = buildSystemPrompt(session, registry.list(), [], state.config);
 
 	const beforeLength = contextMessages.length;
@@ -265,6 +197,7 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		config: initialState.config,
 		model: initialState.model,
 	};
+	const configProvider = new RuntimeConfigProvider<AgentConfig>(initialState.config);
 
 	mkdirSync(paths.agentDir, { recursive: true });
 	mkdirSync(paths.cronDir, { recursive: true });
@@ -289,6 +222,9 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		systemPromptBuilder: () => "You are running a scheduled cron job.",
 		toolRegistry: registry,
 	});
+	let preparedPrompt: PreparedSystemPrompt = prepareSystemPrompt([], [], state.config);
+	let runningServer: RunningServer | undefined;
+	let activeCronJobs: Array<CronJobConfig> = [];
 
 	const deps = {
 		apiKeyResolver: resolveApiKey,
@@ -297,18 +233,88 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		model: state.model,
 		sessionManager,
 		systemPromptBuilder: (session: Awaited<ReturnType<SessionManager["get"]>>) =>
-			buildSystemPrompt(
-				session,
-				registry.list(),
-				deps.workflowEngine === undefined ? [] : deps.workflowEngine.list(),
-				state.config,
-			),
+			buildSystemPromptFromPrepared(session, preparedPrompt),
 		toolRegistry: registry,
 		workflowEngine,
 	};
 
-	const applyFromDisk = (reason: string): boolean => {
+	const restartServerWithFallback = async (
+		currentServer: RunningServer,
+		priorConfig: AgentConfig,
+		nextConfig: AgentConfig,
+		reason: string,
+	): Promise<{ applied: boolean; server: RunningServer }> => {
+		let candidateServer: RunningServer | undefined;
 		try {
+			candidateServer = await startServer(nextConfig, deps, { configProvider });
+		} catch (error: unknown) {
+			logger.warn("server_restart_prebind_failed", {
+				error: error instanceof Error ? error.message : String(error),
+				host: nextConfig.server.host,
+				port: nextConfig.server.port,
+				reason,
+			});
+		}
+
+		if (candidateServer !== undefined) {
+			try {
+				await currentServer.close();
+				return { applied: true, server: candidateServer };
+			} catch (error: unknown) {
+				await candidateServer.close().catch(() => {
+					return;
+				});
+				throw new Error(
+					`Failed to close previous server after prebinding replacement listener: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
+		}
+
+		await currentServer.close();
+		try {
+			const restarted = await startServer(nextConfig, deps, { configProvider });
+			return { applied: true, server: restarted };
+		} catch (error: unknown) {
+			try {
+				const restored = await startServer(priorConfig, deps, { configProvider });
+				logger.error("server_restart_rolled_back", {
+					error: error instanceof Error ? error.message : String(error),
+					host: nextConfig.server.host,
+					port: nextConfig.server.port,
+					reason,
+				});
+				return { applied: false, server: restored };
+			} catch (restoreError: unknown) {
+				throw new Error(
+					[
+						`Failed to bind new server listener: ${
+							error instanceof Error ? error.message : String(error)
+						}`,
+						`Failed to restore prior listener: ${
+							restoreError instanceof Error ? restoreError.message : String(restoreError)
+						}`,
+					].join("; "),
+				);
+			}
+		}
+	};
+
+	const applyFromDisk = async (reason: string): Promise<boolean> => {
+		let nextCronService: CronService | undefined;
+		let cronSwitched = false;
+		let serverSwitched = false;
+		let priorConfigForRollback: AgentConfig | undefined;
+		let priorCronServiceForRollback: CronService | undefined;
+		let priorCronJobsForRollback: Array<CronJobConfig> | undefined;
+		try {
+			const priorConfig = state.config;
+			const priorCronService = cronService;
+			const priorCronJobs = activeCronJobs;
+			priorConfigForRollback = priorConfig;
+			priorCronServiceForRollback = priorCronService;
+			priorCronJobsForRollback = priorCronJobs;
 			const nextConfig = loadConfig(paths.configPath);
 			const nextModel = resolveModel(nextConfig.model.provider, nextConfig.model.name);
 			const nextWorkflowEngine = new WorkflowEngine({
@@ -322,7 +328,11 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 			});
 			nextWorkflowEngine.setDefinitions(loadWorkflows(paths.workflowsDir));
 
-			const nextCronService = new CronService({
+			const nextTools = buildRuntimeTools(nextConfig, paths, nextWorkflowEngine);
+			const nextPrompt = prepareSystemPrompt(nextTools, nextWorkflowEngine.list(), nextConfig);
+			const nextCronJobs = loadCronJobs(paths.cronJobsPath);
+
+			nextCronService = new CronService({
 				apiKeyResolver: resolveApiKey,
 				defaultMaxIterations: nextConfig.tools.maxIterations,
 				logger,
@@ -332,14 +342,51 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 				toolRegistry: registry,
 			});
 
-			reloadRegistry(registry, { config: nextConfig, model: nextModel }, paths, nextWorkflowEngine);
-			nextCronService.start(loadCronJobs(paths.cronJobsPath));
+			const hostChanged =
+				priorConfig.server.host !== nextConfig.server.host ||
+				priorConfig.server.port !== nextConfig.server.port;
+			priorCronService.stop();
+			cronSwitched = true;
+			try {
+				nextCronService.start(nextCronJobs);
+			} catch (error: unknown) {
+				throw new Error(
+					`Failed to apply updated cron jobs: ${
+						error instanceof Error ? error.message : String(error)
+					}`,
+				);
+			}
 
-			deps.cronService?.stop();
+			if (hostChanged && runningServer !== undefined) {
+				// Known accepted behavior: after listener restart there can be a brief window where
+				// the newly bound server serves with pre-commit runtime dependencies. We tolerate this
+				// for now to keep reload rollback semantics simple and availability-first.
+				const restartResult = await restartServerWithFallback(
+					runningServer,
+					priorConfig,
+					nextConfig,
+					reason,
+				);
+				runningServer = restartResult.server;
+				if (!restartResult.applied) {
+					throw new Error("Failed to apply updated server listener");
+				}
+				serverSwitched = true;
+				logger.info("server_restarted", {
+					host: nextConfig.server.host,
+					port: nextConfig.server.port,
+					reason,
+				});
+			}
+
+			registry.replaceAll(nextTools);
+			activeCronJobs = nextCronJobs;
 			state.config = nextConfig;
 			state.model = nextModel;
+			configProvider.set(nextConfig);
 			workflowEngine = nextWorkflowEngine;
 			cronService = nextCronService;
+			preparedPrompt = nextPrompt;
 			deps.cronService = nextCronService;
 			deps.model = nextModel;
 			deps.workflowEngine = nextWorkflowEngine;
@@ -347,11 +394,42 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 			logger.info("config_reloaded", {
 				reason,
 				sections: ["config", "tools", "cron", "workflows"],
-				toolCount: registry.list().length,
+				toolCount: nextTools.length,
 				workflowCount: nextWorkflowEngine.list().length,
 			});
 			return true;
 		} catch (error: unknown) {
+			nextCronService?.stop();
+			if (serverSwitched && priorConfigForRollback !== undefined && runningServer !== undefined) {
+				try {
+					await runningServer.close();
+					runningServer = await startServer(priorConfigForRollback, deps, { configProvider });
+					logger.warn("server_reload_rolled_back", {
+						host: priorConfigForRollback.server.host,
+						port: priorConfigForRollback.server.port,
+						reason,
+					});
+				} catch (rollbackError: unknown) {
+					logger.error("server_reload_rollback_failed", {
+						error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+						reason,
+					});
+				}
+			}
+			if (
+				cronSwitched &&
+				priorCronServiceForRollback !== undefined &&
+				priorCronJobsForRollback !== undefined
+			) {
+				try {
+					priorCronServiceForRollback.start(priorCronJobsForRollback);
+				} catch (rollbackError: unknown) {
+					logger.error("cron_reload_rollback_failed", {
+						error: rollbackError instanceof Error ? rollbackError.message : String(rollbackError),
+						reason,
+					});
+				}
+			}
 			logger.error("config_reload_failed", {
 				error: error instanceof Error ? error.message : String(error),
 				reason,
@@ -360,33 +438,51 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		}
 	};
 
-	if (!applyFromDisk("startup")) {
+	if (!(await applyFromDisk("startup"))) {
 		throw new Error("Failed to load runtime configuration.");
 	}
 
-	await startServer(state.config, deps);
+	runningServer = await startServer(state.config, deps, { configProvider });
 
 	const watchRoots = [paths.agentDir, paths.cronDir, paths.workflowsDir].filter((path) =>
 		existsSync(path),
 	);
 	let reloadTimer: ReturnType<typeof setTimeout> | undefined;
+	let reloadChain: Promise<void> = Promise.resolve();
 	const watcher = watchConfig(watchRoots, ({ path, type }) => {
 		if (reloadTimer !== undefined) {
 			clearTimeout(reloadTimer);
 		}
 		reloadTimer = setTimeout(() => {
-			applyFromDisk(`${type}:${path}`);
+			reloadChain = reloadChain
+				.then(async () => {
+					await applyFromDisk(`${type}:${path}`);
+				})
+				.catch(() => {
+					return;
+				});
 		}, 120);
 	});
 
-	const shutdown = (): void => {
+	const shutdown = async (): Promise<void> => {
 		if (reloadTimer !== undefined) {
 			clearTimeout(reloadTimer);
 		}
 		watcher.close();
+		await reloadChain.catch(() => {
+			return;
+		});
+		deps.cronService?.stop();
+		if (runningServer !== undefined) {
+			await runningServer.close();
+			runningServer = undefined;
+		}
 	};
-	process.on("SIGINT", shutdown);
-	process.on("SIGTERM", shutdown);
+	const handleSignal = (): void => {
+		void shutdown();
+	};
+	process.on("SIGINT", handleSignal);
+	process.on("SIGTERM", handleSignal);
 }
 
 /**

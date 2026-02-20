@@ -1,9 +1,8 @@
-import type { Message } from "@mariozechner/pi-ai";
 import { Cron } from "croner";
 import { agentLoop } from "../agent/index.js";
 import type { AgentLoopConfig } from "../agent/index.js";
 import type { Logger } from "../logging/index.js";
-import type { AppendMessageInput, SessionManager } from "../sessions/index.js";
+import { toSessionAppendInput, type SessionManager } from "../sessions/index.js";
 import type { ToolRegistry } from "../tools/index.js";
 import { ToolRegistry as RuntimeToolRegistry } from "../tools/index.js";
 import type { CronJobConfig, CronJobStatus } from "./types.js";
@@ -29,49 +28,6 @@ export interface CronServiceDependencies {
 function cronSessionName(jobId: string, now: Date = new Date()): string {
 	const stamp = now.toISOString().replace("T", " ").slice(0, 16);
 	return `[cron] ${jobId} - ${stamp}`;
-}
-
-function toSessionAppendInput(message: Message): AppendMessageInput | undefined {
-	if (message.role === "user") {
-		const blocks = (
-			Array.isArray(message.content)
-				? message.content
-				: [{ text: message.content, type: "text" as const }]
-		)
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return { content: blocks, role: "user" };
-	}
-
-	if (message.role === "assistant") {
-		const blocks = message.content
-			.filter((entry) => entry.type === "text" || entry.type === "toolCall")
-			.map((entry) => {
-				if (entry.type === "toolCall") {
-					return {
-						arguments: entry.arguments,
-						id: entry.id,
-						name: entry.name,
-						type: "toolCall" as const,
-					};
-				}
-				return { text: entry.text, type: "text" as const };
-			});
-		return { content: blocks, role: "assistant" };
-	}
-
-	if (message.role === "toolResult") {
-		return {
-			content: message.content
-				.filter((entry) => entry.type === "text")
-				.map((entry) => ({ text: entry.text, type: "text" as const })),
-			isError: message.isError,
-			role: "toolResult",
-			toolCallId: message.toolCallId,
-		};
-	}
-
-	return undefined;
 }
 
 function filterToolsForJob(baseRegistry: ToolRegistry, job: CronJobConfig): ToolRegistry {
@@ -225,7 +181,7 @@ export class CronService {
 		const scopedTools = filterToolsForJob(this.#deps.toolRegistry, runtime.config);
 
 		try {
-			const contextMessages = await this.#deps.sessionManager.buildContext(session.id);
+			const contextMessages = await this.#deps.sessionManager.buildContextForRun(session.id);
 			const systemPrompt =
 				this.#deps.systemPromptBuilder === undefined
 					? "You are running a scheduled cron job."

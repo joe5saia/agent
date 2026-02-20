@@ -2,58 +2,15 @@ import { Value } from "@sinclair/typebox/value";
 import { agentLoop } from "../agent/index.js";
 import type { AgentLoopConfig } from "../agent/index.js";
 import type { Logger } from "../logging/index.js";
-import type { AppendMessageInput, SessionManager, SessionMetadata } from "../sessions/index.js";
+import {
+	toSessionAppendInput,
+	type SessionManager,
+	type SessionMetadata,
+} from "../sessions/index.js";
 import type { AgentTool, ToolRegistry } from "../tools/index.js";
 import { evaluateCondition } from "./condition.js";
 import { expandTemplate } from "./template.js";
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowStepResult } from "./types.js";
-
-function toSessionAppendInput(
-	message: Parameters<typeof agentLoop>[0][number],
-): AppendMessageInput | undefined {
-	if (message.role === "user") {
-		const blocks = (
-			Array.isArray(message.content)
-				? message.content
-				: [{ text: message.content, type: "text" as const }]
-		)
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return { content: blocks, role: "user" };
-	}
-
-	if (message.role === "assistant") {
-		return {
-			content: message.content
-				.filter((entry) => entry.type === "text" || entry.type === "toolCall")
-				.map((entry) => {
-					if (entry.type === "toolCall") {
-						return {
-							arguments: entry.arguments,
-							id: entry.id,
-							name: entry.name,
-							type: "toolCall" as const,
-						};
-					}
-					return { text: entry.text, type: "text" as const };
-				}),
-			role: "assistant",
-		};
-	}
-
-	if (message.role === "toolResult") {
-		return {
-			content: message.content
-				.filter((entry) => entry.type === "text")
-				.map((entry) => ({ text: entry.text, type: "text" as const })),
-			isError: message.isError,
-			role: "toolResult",
-			toolCallId: message.toolCallId,
-		};
-	}
-
-	return undefined;
-}
 
 function assistantOutput(
 	message: Extract<Parameters<typeof agentLoop>[0][number], { role: "assistant" }>,
@@ -218,7 +175,7 @@ export class WorkflowEngine {
 			});
 
 			try {
-				const contextMessages = await this.#deps.sessionManager.buildContext(session.id);
+				const contextMessages = await this.#deps.sessionManager.buildContextForRun(session.id);
 				const beforeLength = contextMessages.length;
 				const systemPrompt =
 					this.#deps.systemPromptBuilder === undefined

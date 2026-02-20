@@ -1,6 +1,7 @@
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createLogger } from "../src/logging/index.js";
 
@@ -27,7 +28,7 @@ afterEach(() => {
 });
 
 describe("createLogger", () => {
-	it("S14.6: writes valid JSON log entries", () => {
+	it("S14.6: writes valid JSON log entries", async () => {
 		const logPath = createLogFilePath();
 		const logger = createLogger("agent-loop", {
 			file: logPath,
@@ -37,6 +38,7 @@ describe("createLogger", () => {
 		});
 
 		logger.info("turn_start", { sessionId: "abc123" });
+		await sleep(20);
 
 		const lines = readLogLines(logPath);
 		expect(lines).toHaveLength(1);
@@ -50,7 +52,7 @@ describe("createLogger", () => {
 		expect(typeof parsed.ts).toBe("string");
 	});
 
-	it("S14.7: filters entries below configured level", () => {
+	it("S14.7: filters entries below configured level", async () => {
 		const logPath = createLogFilePath();
 		const logger = createLogger("agent-loop", {
 			file: logPath,
@@ -61,6 +63,7 @@ describe("createLogger", () => {
 
 		logger.debug("stream_delta", { chunk: "hello" });
 		logger.info("turn_start", { sessionId: "abc123" });
+		await sleep(20);
 
 		const lines = readLogLines(logPath);
 		expect(lines).toHaveLength(1);
@@ -68,7 +71,7 @@ describe("createLogger", () => {
 		expect(parsed.event).toBe("turn_start");
 	});
 
-	it("S11.7 + S14.10: redacts secret-like values by key before writing", () => {
+	it("S11.7 + S14.10: redacts secret-like values by key before writing", async () => {
 		const logPath = createLogFilePath();
 		const logger = createLogger("security", {
 			file: logPath,
@@ -84,6 +87,7 @@ describe("createLogger", () => {
 				service_token: "token-value",
 			},
 		});
+		await sleep(20);
 
 		const lines = readLogLines(logPath);
 		const parsed = JSON.parse(lines[0] ?? "");
@@ -92,7 +96,7 @@ describe("createLogger", () => {
 		expect(parsed.nested.service_token).toBe("[REDACTED]");
 	});
 
-	it("S11.8: redacts JWT-like output strings in debug logs", () => {
+	it("S11.8: redacts JWT-like output strings in debug logs", async () => {
 		const logPath = createLogFilePath();
 		const logger = createLogger("agent-loop", {
 			file: logPath,
@@ -104,6 +108,7 @@ describe("createLogger", () => {
 		logger.debug("tool_output", {
 			output: "token=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjMifQ.signature",
 		});
+		await sleep(20);
 
 		const lines = readLogLines(logPath);
 		const parsed = JSON.parse(lines[0] ?? "");
@@ -111,7 +116,7 @@ describe("createLogger", () => {
 		expect(parsed.output).not.toContain("eyJhbGciOiJIUzI1NiJ9");
 	});
 
-	it("creates parent directories and can emit to stdout", () => {
+	it("creates parent directories and can emit to stdout", async () => {
 		const writes: Array<string> = [];
 		const logPath = createLogFilePath();
 		const writeStdout = vi.fn((line: string) => {
@@ -129,6 +134,7 @@ describe("createLogger", () => {
 		);
 
 		logger.info("server_start", { host: "127.0.0.1", port: 8080 });
+		await sleep(20);
 
 		expect(writeStdout).toHaveBeenCalledTimes(1);
 		expect(writes).toHaveLength(1);

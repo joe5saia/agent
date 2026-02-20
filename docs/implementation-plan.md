@@ -4,6 +4,8 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-20:** Implemented architecture hardening fixes for all findings in `docs/architecture-review-v1.md`: metadata-based session sequencing and cached context rebuild path, async non-blocking logger with decoupled rotation checks, runtime config provider with graceful host/port restart on reload, WS queue backpressure/cleanup hardening, cached prompt/tool schema assembly, shared session message codec across CLI/WS/cron/workflows, and side-effect-free session GET reads. Verification: `npm run check` and `npm test`.
+- **2026-02-20:** Completed V1 architecture hardening review and documented prioritized findings in `docs/architecture-review-v1.md` (structure, module coupling, reload semantics, and performance bottlenecks). Updated `docs/README.md` index and `docs/known-bugs.md` with newly identified unresolved defects.
 - **2026-02-19:** Added `docs/onboarding-setup.md` with two onboarding tracks (dedicated VM and personal laptop), including Claude OAuth/Codex token setup and Docker Compose bootstrapping. Updated `docs/README.md` index.
 - **2026-02-18:** Completed Phase 4 hardening delivery (config hot-reload, execution limit enforcement, token metrics tracking, systemd unit, integration tests, and deployment docs). Verification: `npm run check` and `npm test`.
 - **2026-02-18:** Completed Phase 3 automation delivery (cron service and API, workflow engine/tooling/API, session compaction, and log rotation) with full test coverage. Verification: `npm run check` and `npm test`.

@@ -1,4 +1,4 @@
-import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -222,5 +222,245 @@ describe("SessionManager", () => {
 		expect(context[1]?.role).toBe("user");
 		expect(JSON.stringify(context[0])).toContain("summary text");
 		expect(JSON.stringify(context[1])).toContain("new");
+	});
+
+	it("restores toolResult toolName from persisted records", async () => {
+		const sessionsDir = createTempSessionsDir();
+		const manager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		const session = await manager.create();
+
+		await manager.appendMessage(session.id, {
+			content: [{ text: "result", type: "text" }],
+			isError: false,
+			role: "toolResult",
+			toolCallId: "call_1",
+			toolName: "read_file",
+		});
+
+		const context = await manager.buildContext(session.id);
+		const toolResult = context.find((message) => message.role === "toolResult");
+		expect(toolResult?.role).toBe("toolResult");
+		if (toolResult?.role === "toolResult") {
+			expect(toolResult.toolName).toBe("read_file");
+		}
+	});
+
+	it("infers nextSeq from max persisted seq for legacy metadata", async () => {
+		const sessionsDir = createTempSessionsDir();
+		const manager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		const session = await manager.create();
+		const sessionDir = join(sessionsDir, session.id);
+		const sessionFile = join(sessionDir, "session.jsonl");
+		const metadataFile = join(sessionDir, "metadata.json");
+
+		appendFileSync(
+			sessionFile,
+			[
+				JSON.stringify({
+					content: [{ text: "first", type: "text" }],
+					recordType: "message",
+					role: "user",
+					schemaVersion: 1,
+					seq: 1,
+					timestamp: new Date().toISOString(),
+				}),
+				JSON.stringify({
+					firstKeptSeq: 3,
+					modifiedFiles: [],
+					readFiles: [],
+					recordType: "compaction",
+					schemaVersion: 1,
+					seq: 2,
+					summary: "summary",
+					timestamp: new Date().toISOString(),
+					tokensBefore: 100,
+				}),
+				JSON.stringify({
+					content: [{ text: "third", type: "text" }],
+					recordType: "message",
+					role: "user",
+					schemaVersion: 1,
+					seq: 3,
+					timestamp: new Date().toISOString(),
+				}),
+			].join("\n") + "\n",
+			"utf8",
+		);
+		writeFileSync(
+			metadataFile,
+			JSON.stringify(
+				{
+					createdAt: session.createdAt,
+					id: session.id,
+					lastMessageAt: session.lastMessageAt,
+					messageCount: 2,
+					metrics: session.metrics,
+					model: session.model,
+					name: session.name,
+					source: session.source,
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+
+		const reopenedManager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		await reopenedManager.appendMessage(session.id, {
+			content: [{ text: "new", type: "text" }],
+			role: "user",
+		});
+
+		const records = await readRecords(sessionFile);
+		const appended = records.at(-1);
+		expect(appended?.seq).toBe(4);
+	});
+
+	it("clamps stale explicit nextSeq against persisted records", async () => {
+		const sessionsDir = createTempSessionsDir();
+		const manager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		const session = await manager.create();
+		const sessionDir = join(sessionsDir, session.id);
+		const sessionFile = join(sessionDir, "session.jsonl");
+		const metadataFile = join(sessionDir, "metadata.json");
+
+		appendFileSync(
+			sessionFile,
+			[
+				JSON.stringify({
+					content: [{ text: "first", type: "text" }],
+					recordType: "message",
+					role: "user",
+					schemaVersion: 1,
+					seq: 1,
+					timestamp: new Date().toISOString(),
+				}),
+				JSON.stringify({
+					content: [{ text: "second", type: "text" }],
+					recordType: "message",
+					role: "assistant",
+					schemaVersion: 1,
+					seq: 2,
+					timestamp: new Date().toISOString(),
+				}),
+			].join("\n") + "\n",
+			"utf8",
+		);
+		writeFileSync(
+			metadataFile,
+			JSON.stringify(
+				{
+					createdAt: session.createdAt,
+					id: session.id,
+					lastMessageAt: session.lastMessageAt,
+					messageCount: 2,
+					metrics: session.metrics,
+					model: session.model,
+					name: session.name,
+					nextSeq: 2,
+					source: session.source,
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+
+		const reopenedManager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		await reopenedManager.appendMessage(session.id, {
+			content: [{ text: "third", type: "text" }],
+			role: "user",
+		});
+
+		const records = await readRecords(sessionFile);
+		const appended = records.at(-1);
+		expect(appended?.seq).toBe(3);
+	});
+
+	it("persists reconciled nextSeq on read before first append", async () => {
+		const sessionsDir = createTempSessionsDir();
+		const manager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		const session = await manager.create();
+		const sessionDir = join(sessionsDir, session.id);
+		const sessionFile = join(sessionDir, "session.jsonl");
+		const metadataFile = join(sessionDir, "metadata.json");
+
+		appendFileSync(
+			sessionFile,
+			[
+				JSON.stringify({
+					content: [{ text: "first", type: "text" }],
+					recordType: "message",
+					role: "user",
+					schemaVersion: 1,
+					seq: 1,
+					timestamp: new Date().toISOString(),
+				}),
+				JSON.stringify({
+					content: [{ text: "second", type: "text" }],
+					recordType: "message",
+					role: "assistant",
+					schemaVersion: 1,
+					seq: 2,
+					timestamp: new Date().toISOString(),
+				}),
+			].join("\n") + "\n",
+			"utf8",
+		);
+		writeFileSync(
+			metadataFile,
+			JSON.stringify(
+				{
+					createdAt: session.createdAt,
+					id: session.id,
+					lastMessageAt: session.lastMessageAt,
+					messageCount: 2,
+					metrics: session.metrics,
+					model: session.model,
+					name: session.name,
+					nextSeq: 2,
+					source: session.source,
+				},
+				null,
+				2,
+			),
+			"utf8",
+		);
+
+		const reopenedManager = new SessionManager({
+			defaultModel: "test-model",
+			sessionsDir,
+		});
+		const metadata = await reopenedManager.get(session.id);
+		expect(metadata.nextSeq).toBe(3);
+		const persistedAfterRead = JSON.parse(readFileSync(metadataFile, "utf8")) as {
+			nextSeq: number;
+		};
+		expect(persistedAfterRead.nextSeq).toBe(3);
+
+		await reopenedManager.appendMessage(session.id, {
+			content: [{ text: "third", type: "text" }],
+			role: "user",
+		});
+		const records = await readRecords(sessionFile);
+		expect(records.at(-1)?.seq).toBe(3);
 	});
 });

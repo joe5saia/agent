@@ -7,11 +7,17 @@ import { createSessionsRoutes } from "./routes/sessions.js";
 import { createWorkflowsRoutes } from "./routes/workflows.js";
 import type { ServerAppContext, ServerDependencies } from "./types.js";
 
+type ConfigProvider = AgentConfig | (() => AgentConfig);
+
+function resolveConfig(provider: ConfigProvider): AgentConfig {
+	return typeof provider === "function" ? provider() : provider;
+}
+
 /**
  * Builds the Hono app without binding a network port.
  */
 export function createApp(
-	config: AgentConfig,
+	configProvider: ConfigProvider,
 	deps: ServerDependencies,
 ): Hono<{ Variables: ServerAppContext & { identity: { login?: string; name?: string } } }> {
 	const app = new Hono<{
@@ -19,7 +25,7 @@ export function createApp(
 	}>();
 
 	app.use("*", async (context, next) => {
-		context.set("config", config);
+		context.set("config", resolveConfig(configProvider));
 		context.set("deps", deps);
 		const startedAt = Date.now();
 		await next();

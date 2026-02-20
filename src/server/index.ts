@@ -1,5 +1,6 @@
 import { serve, type ServerType } from "@hono/node-server";
 import type { AgentConfig } from "../config/index.js";
+import type { RuntimeConfigProvider } from "../runtime/config-provider.js";
 import { createApp } from "./app.js";
 import type { ServerDependencies } from "./types.js";
 import { WsRuntime } from "./ws.js";
@@ -11,17 +12,30 @@ export interface RunningServer {
 	ws: WsRuntime;
 }
 
+export interface StartServerOptions {
+	configProvider?: RuntimeConfigProvider<AgentConfig>;
+	maxWsQueueDepth?: number;
+}
+
 /**
  * Starts HTTP and WebSocket services on the configured host/port.
  */
 export async function startServer(
 	config: AgentConfig,
 	deps: ServerDependencies,
+	options: StartServerOptions = {},
 ): Promise<RunningServer> {
-	const app = createApp(config, deps);
+	const resolveConfig = (): AgentConfig => options.configProvider?.get() ?? config;
+	const app = createApp(resolveConfig, deps);
 	const ws = new WsRuntime(deps, {
-		maxIterations: config.tools.maxIterations,
-		retry: config.retry,
+		maxQueueDepth: options.maxWsQueueDepth ?? 8,
+		resolveRuntimeOptions: () => {
+			const currentConfig = resolveConfig();
+			return {
+				maxIterations: currentConfig.tools.maxIterations,
+				retry: currentConfig.retry,
+			};
+		},
 	});
 
 	let httpServer!: ServerType;

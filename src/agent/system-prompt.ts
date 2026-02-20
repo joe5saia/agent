@@ -14,6 +14,13 @@ export interface WorkflowSummary {
 	parameters?: Record<string, unknown>;
 }
 
+export interface PreparedSystemPrompt {
+	customInstructions?: string;
+	identity: string;
+	toolsSection?: string;
+	workflowsSection?: string;
+}
+
 const defaultIdentityBlock = [
 	"You are an AI agent running on a dedicated virtual machine.",
 	"",
@@ -53,6 +60,85 @@ function readOptionalFile(path: string): string | undefined {
 	}
 }
 
+function buildToolsSection(tools: Array<AgentTool>): string | undefined {
+	if (tools.length === 0) {
+		return undefined;
+	}
+	const toolLines = tools.map((tool) => {
+		const schema = JSON.stringify(tool.parameters);
+		return `- **${tool.name}**: ${tool.description}\n  Parameters: \`${schema}\``;
+	});
+	return ["## Available Tools", ...toolLines].join("\n");
+}
+
+function buildWorkflowsSection(workflows: Array<WorkflowSummary>): string | undefined {
+	if (workflows.length === 0) {
+		return undefined;
+	}
+	const workflowLines = workflows.map((workflow) => {
+		const parameterText =
+			workflow.parameters === undefined
+				? ""
+				: `\n  Parameters: \`${JSON.stringify(workflow.parameters)}\``;
+		return `- **${workflow.name}**: ${workflow.description}${parameterText}`;
+	});
+	return ["## Available Workflows", ...workflowLines].join("\n");
+}
+
+/**
+ * Builds cacheable static prompt fragments from config/tool/workflow state.
+ */
+export function prepareSystemPrompt(
+	tools: Array<AgentTool>,
+	workflows: Array<WorkflowSummary>,
+	config: Pick<AgentConfig, "systemPrompt">,
+): PreparedSystemPrompt {
+	const identity =
+		readOptionalFile(config.systemPrompt.identityFile)?.trim() ?? defaultIdentityBlock;
+	const customInstructionsPath = config.systemPrompt.customInstructionsFile;
+	const customInstructions =
+		typeof customInstructionsPath === "string"
+			? readOptionalFile(customInstructionsPath)?.trim()
+			: undefined;
+	const toolsSection = buildToolsSection(tools);
+	const workflowsSection = buildWorkflowsSection(workflows);
+
+	return {
+		...(customInstructions === undefined || customInstructions === ""
+			? {}
+			: { customInstructions }),
+		identity,
+		...(toolsSection === undefined ? {} : { toolsSection }),
+		...(workflowsSection === undefined ? {} : { workflowsSection }),
+	};
+}
+
+/**
+ * Builds the final prompt from precomputed static fragments and session-specific overrides.
+ */
+export function buildSystemPromptFromPrepared(
+	session: Pick<SessionMetadata, "systemPromptOverride">,
+	prepared: PreparedSystemPrompt,
+): string {
+	const parts: Array<string> = [prepared.identity];
+	if (prepared.toolsSection !== undefined) {
+		parts.push(prepared.toolsSection);
+	}
+	if (prepared.workflowsSection !== undefined) {
+		parts.push(prepared.workflowsSection);
+	}
+	if (
+		typeof session.systemPromptOverride === "string" &&
+		session.systemPromptOverride.trim() !== ""
+	) {
+		parts.push(`## Session Instructions\n${session.systemPromptOverride.trim()}`);
+	}
+	if (prepared.customInstructions !== undefined) {
+		parts.push(prepared.customInstructions);
+	}
+	return `${parts.join("\n\n")}\n`;
+}
+
 /**
  * Builds the system prompt by concatenating identity, tool/workflow metadata, and session layers.
  */
@@ -62,45 +148,5 @@ export function buildSystemPrompt(
 	workflows: Array<WorkflowSummary>,
 	config: Pick<AgentConfig, "systemPrompt">,
 ): string {
-	const parts: Array<string> = [];
-
-	const identity =
-		readOptionalFile(config.systemPrompt.identityFile)?.trim() ?? defaultIdentityBlock;
-	parts.push(identity);
-
-	if (tools.length > 0) {
-		const toolLines = tools.map((tool) => {
-			const schema = JSON.stringify(tool.parameters, null, 2);
-			return `- **${tool.name}**: ${tool.description}\n\`\`\`json\n${schema}\n\`\`\``;
-		});
-		parts.push(["## Available Tools", ...toolLines].join("\n"));
-	}
-
-	if (workflows.length > 0) {
-		const workflowLines = workflows.map((workflow) => {
-			const parameterText =
-				workflow.parameters === undefined
-					? ""
-					: `\n\`\`\`json\n${JSON.stringify(workflow.parameters, null, 2)}\n\`\`\``;
-			return `- **${workflow.name}**: ${workflow.description}${parameterText}`;
-		});
-		parts.push(["## Available Workflows", ...workflowLines].join("\n"));
-	}
-
-	if (
-		typeof session.systemPromptOverride === "string" &&
-		session.systemPromptOverride.trim() !== ""
-	) {
-		parts.push(`## Session Instructions\n${session.systemPromptOverride.trim()}`);
-	}
-
-	const customInstructionsPath = config.systemPrompt.customInstructionsFile;
-	if (typeof customInstructionsPath === "string") {
-		const customInstructions = readOptionalFile(customInstructionsPath);
-		if (typeof customInstructions === "string" && customInstructions.trim() !== "") {
-			parts.push(customInstructions.trim());
-		}
-	}
-
-	return `${parts.join("\n\n")}\n`;
+	return buildSystemPromptFromPrepared(session, prepareSystemPrompt(tools, workflows, config));
 }

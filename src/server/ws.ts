@@ -4,7 +4,7 @@ import type { Message } from "@mariozechner/pi-ai";
 import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { agentLoop } from "../agent/index.js";
 import type { RetryStatusEvent } from "../agent/index.js";
-import { isValidSessionId, type SessionMetadata } from "../sessions/index.js";
+import { assistantText, isValidSessionId, toSessionAppendInput } from "../sessions/index.js";
 import type { ServerDependencies } from "./types.js";
 
 interface SendMessagePayload {
@@ -37,6 +37,11 @@ interface WsRuntimeOptions {
 	};
 }
 
+export interface WsRuntimeSettings {
+	maxQueueDepth: number;
+	resolveRuntimeOptions: () => WsRuntimeOptions;
+}
+
 interface ConnectionState {
 	clientId: string;
 	sessions: Set<string>;
@@ -58,73 +63,6 @@ function generateId(now: number = Date.now()): string {
 	return `${timePart}${randomPart}`;
 }
 
-function toSessionAppendInput(message: Message):
-	| {
-			content: Array<
-				| { text: string; type: "text" }
-				| { arguments: Record<string, unknown>; id: string; name: string; type: "toolCall" }
-			>;
-			isError?: boolean;
-			role: "assistant" | "toolResult" | "user";
-			toolCallId?: string;
-	  }
-	| undefined {
-	if (message.role === "user") {
-		const blocks = (
-			Array.isArray(message.content)
-				? message.content
-				: [{ text: message.content, type: "text" as const }]
-		)
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return { content: blocks, role: "user" };
-	}
-
-	if (message.role === "assistant") {
-		const blocks = message.content
-			.filter(
-				(entry) => entry.type === "text" || entry.type === "toolCall" || entry.type === "thinking",
-			)
-			.map((entry) => {
-				if (entry.type === "toolCall") {
-					return {
-						arguments: entry.arguments,
-						id: entry.id,
-						name: entry.name,
-						type: "toolCall" as const,
-					};
-				}
-				if (entry.type === "thinking") {
-					return { text: entry.thinking, type: "text" as const };
-				}
-				return { text: entry.text, type: "text" as const };
-			});
-		return { content: blocks, role: "assistant" };
-	}
-
-	if (message.role === "toolResult") {
-		const blocks = message.content
-			.filter((entry) => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-		return {
-			content: blocks,
-			isError: message.isError,
-			role: "toolResult",
-			toolCallId: message.toolCallId,
-		};
-	}
-
-	return undefined;
-}
-
-function assistantText(message: Extract<Message, { role: "assistant" }>): string {
-	return message.content
-		.filter((entry) => entry.type === "text")
-		.map((entry) => entry.text)
-		.join("\n")
-		.trim();
-}
-
 /**
  * Handles WebSocket connections and per-session run orchestration.
  */
@@ -132,14 +70,15 @@ export class WsRuntime {
 	readonly #activeRuns = new Map<string, ActiveRun>();
 	readonly #clients = new Set<ConnectionState>();
 	readonly #deps: ServerDependencies;
-	readonly #options: WsRuntimeOptions;
 	readonly #sessionClients = new Map<string, Set<ConnectionState>>();
+	readonly #sessionQueueDepth = new Map<string, number>();
 	readonly #sessionQueues = new Map<string, Promise<void>>();
+	readonly #settings: WsRuntimeSettings;
 	readonly #server = new WebSocketServer({ noServer: true });
 
-	public constructor(deps: ServerDependencies, options: WsRuntimeOptions) {
+	public constructor(deps: ServerDependencies, settings: WsRuntimeSettings) {
 		this.#deps = deps;
-		this.#options = options;
+		this.#settings = settings;
 
 		this.#server.on("connection", (socket: WebSocket, request: IncomingMessage) => {
 			const connection: ConnectionState = {
@@ -220,7 +159,18 @@ export class WsRuntime {
 		}
 	}
 
-	#enqueue(sessionId: string, operation: () => Promise<void>): void {
+	#enqueue(sessionId: string, runId: string, operation: () => Promise<void>): boolean {
+		const queueDepth = this.#sessionQueueDepth.get(sessionId) ?? 0;
+		if (queueDepth >= this.#settings.maxQueueDepth) {
+			this.#deps.logger.warn("ws_queue_full", {
+				queueDepth,
+				runId,
+				sessionId,
+			});
+			return false;
+		}
+
+		this.#sessionQueueDepth.set(sessionId, queueDepth + 1);
 		const prior = this.#sessionQueues.get(sessionId) ?? Promise.resolve();
 		const next = prior
 			.catch(() => {
@@ -228,13 +178,27 @@ export class WsRuntime {
 			})
 			.then(async () => {
 				await operation();
+			})
+			.catch((error: unknown) => {
+				this.#deps.logger.error("ws_queue_operation_failed", {
+					error: error instanceof Error ? error.message : String(error),
+					runId,
+					sessionId,
+				});
 			});
 		this.#sessionQueues.set(sessionId, next);
 		next.finally(() => {
+			const remainingDepth = Math.max((this.#sessionQueueDepth.get(sessionId) ?? 1) - 1, 0);
+			if (remainingDepth === 0) {
+				this.#sessionQueueDepth.delete(sessionId);
+			} else {
+				this.#sessionQueueDepth.set(sessionId, remainingDepth);
+			}
 			if (this.#sessionQueues.get(sessionId) === next) {
 				this.#sessionQueues.delete(sessionId);
 			}
 		});
+		return true;
 	}
 
 	#emit(
@@ -278,9 +242,13 @@ export class WsRuntime {
 
 		this.#subscribe(connection, payload.sessionId);
 		const runId = generateId();
-		this.#enqueue(payload.sessionId, async () => {
-			await this.#runTurn(payload.sessionId, runId, payload.content);
-		});
+		if (
+			!this.#enqueue(payload.sessionId, runId, async () => {
+				await this.#runTurn(payload.sessionId, runId, payload.content);
+			})
+		) {
+			this.#sendError(connection, "Session queue is full. Please retry later.", payload.sessionId);
+		}
 	}
 
 	async #onMessage(connection: ConnectionState, message: string): Promise<void> {
@@ -328,39 +296,40 @@ export class WsRuntime {
 	}
 
 	async #runTurn(sessionId: string, runId: string, userText: string): Promise<void> {
-		let metadata: SessionMetadata;
 		try {
-			metadata = await this.#deps.sessionManager.get(sessionId);
+			await this.#deps.sessionManager.get(sessionId);
 		} catch {
 			this.#emit(sessionId, runId, "error", { error: "Session not found" });
 			return;
 		}
 
 		const controller = new AbortController();
-		this.#activeRuns.set(`${sessionId}:${runId}`, {
+		const runKey = `${sessionId}:${runId}`;
+		this.#activeRuns.set(runKey, {
 			controller,
 			runId,
 			sessionId,
 		});
 
-		this.#emit(sessionId, runId, "run_start", { startedAt: new Date().toISOString() });
-		await this.#deps.sessionManager.appendMessage(sessionId, {
-			content: [{ text: userText, type: "text" }],
-			role: "user",
-		});
-		const postUserMetadata = await this.#deps.sessionManager.get(sessionId);
-		const shouldGenerateTitle =
-			postUserMetadata.name === "New Session" && postUserMetadata.messageCount === 1;
-
 		try {
-			const contextMessages = await this.#deps.sessionManager.buildContext(sessionId);
+			this.#emit(sessionId, runId, "run_start", { startedAt: new Date().toISOString() });
+			await this.#deps.sessionManager.appendMessage(sessionId, {
+				content: [{ text: userText, type: "text" }],
+				role: "user",
+			});
+			const postUserMetadata = await this.#deps.sessionManager.get(sessionId);
+			const shouldGenerateTitle =
+				postUserMetadata.name === "New Session" && postUserMetadata.messageCount === 1;
+
+			const contextMessages = await this.#deps.sessionManager.buildContextForRun(sessionId);
 			const systemPrompt = this.#deps.systemPromptBuilder(postUserMetadata);
 			const previousLength = contextMessages.length;
+			const runtimeOptions = this.#settings.resolveRuntimeOptions();
 
 			const runAgentLoop = this.#deps.runAgentLoop ?? agentLoop;
 			const loopConfig = {
 				logger: this.#deps.logger,
-				maxIterations: this.#options.maxIterations,
+				maxIterations: runtimeOptions.maxIterations,
 				onStatus: (status: RetryStatusEvent) => {
 					this.#emit(sessionId, runId, "status", {
 						attempt: status.attempt,
@@ -380,7 +349,7 @@ export class WsRuntime {
 						return;
 					});
 				},
-				retry: this.#options.retry,
+				retry: runtimeOptions.retry,
 				runId,
 				sessionId,
 				...(this.#deps.apiKeyResolver !== undefined
@@ -471,7 +440,7 @@ export class WsRuntime {
 			const message = error instanceof Error ? error.message : String(error);
 			this.#emit(sessionId, runId, "error", { error: message });
 		} finally {
-			this.#activeRuns.delete(`${sessionId}:${runId}`);
+			this.#activeRuns.delete(runKey);
 		}
 	}
 

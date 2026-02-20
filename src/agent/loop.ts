@@ -21,6 +21,7 @@ export async function agentLoop(
 		config.streamFactory ??
 		((streamModel, context, options) =>
 			streamSimple(streamModel, context, options as Record<string, never>));
+	const toolSchemas = tools.toToolSchemas();
 
 	let iterations = 0;
 	while (iterations < config.maxIterations) {
@@ -50,7 +51,7 @@ export async function agentLoop(
 				{
 					messages,
 					systemPrompt,
-					tools: tools.toToolSchemas(),
+					tools: toolSchemas,
 				},
 				Object.keys(streamOptions).length > 0 ? streamOptions : undefined,
 			);

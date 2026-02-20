@@ -2,17 +2,17 @@ import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { Api, Message } from "@mariozechner/pi-ai";
+import type { Message } from "@mariozechner/pi-ai";
 import { compactSession } from "./compaction.js";
 import { appendRecord, readRecords } from "./jsonl.js";
+import { recordToMessage, type AppendMessageInput } from "./message-codec.js";
 import {
 	isValidSessionId,
 	type CompactionSettings,
-	type ContentBlock,
-	type SessionMetrics,
 	type SessionContext,
 	type SessionListItem,
 	type SessionMetadata,
+	type SessionMetrics,
 	type SessionRecord,
 } from "./types.js";
 
@@ -21,13 +21,6 @@ interface CreateSessionOptions {
 	name?: string;
 	source?: "cron" | "interactive";
 	systemPromptOverride?: string;
-}
-
-interface AppendMessageInput {
-	content: Array<ContentBlock>;
-	isError?: boolean;
-	role: "assistant" | "toolResult" | "user";
-	toolCallId?: string;
 }
 
 export interface SessionTurnMetricsInput {
@@ -57,12 +50,16 @@ interface GenerateTitleOptions {
 }
 
 const defaultSessionName = "New Session";
-/**
- * Session records do not persist provider API metadata, so reconstructed assistant
- * messages use a stable synthetic provider/api pair.
- */
-const persistedAssistantApi: Api = "openai-responses";
-const persistedAssistantProvider = "session";
+const listConcurrencyLimit = 8;
+
+function defaultSessionMetrics(): SessionMetrics {
+	return {
+		totalDurationMs: 0,
+		totalTokens: 0,
+		totalToolCalls: 0,
+		totalTurns: 0,
+	};
+}
 
 /**
  * Expands a path that starts with ~/.
@@ -111,10 +108,12 @@ export class SessionManager {
 		  }
 		| undefined;
 	readonly #locks = new Map<string, Promise<void>>();
+	readonly #nextSeqReconciled = new Set<string>();
+	readonly #sessionsDir: string;
 	readonly #summarizeCompaction:
 		| ((input: { mode: "initial" | "update"; prompt: string }) => Promise<string>)
 		| undefined;
-	readonly #sessionsDir: string;
+	readonly #contextCache = new Map<string, SessionContext>();
 
 	public constructor(options: SessionManagerOptions) {
 		this.#compaction = options.compaction ?? {
@@ -144,14 +143,10 @@ export class SessionManager {
 			id,
 			lastMessageAt: timestamp,
 			messageCount: 0,
-			metrics: {
-				totalDurationMs: 0,
-				totalTokens: 0,
-				totalToolCalls: 0,
-				totalTurns: 0,
-			},
+			metrics: defaultSessionMetrics(),
 			model: this.#defaultModel,
 			name: options.name ?? defaultSessionName,
+			nextSeq: 1,
 			source: options.source ?? "interactive",
 		};
 		if (options.cronJobId !== undefined) {
@@ -162,6 +157,7 @@ export class SessionManager {
 		}
 
 		await this.#writeMetadataAtomic(id, metadata);
+		this.#nextSeqReconciled.add(id);
 		return metadata;
 	}
 
@@ -170,9 +166,17 @@ export class SessionManager {
 	 */
 	public async get(id: string): Promise<SessionMetadata> {
 		this.#assertValidSessionId(id);
-		const metadataPath = this.#metadataFilePath(id);
-		const raw = await readFile(metadataPath, "utf8");
-		return JSON.parse(raw) as SessionMetadata;
+		const metadata = await this.#readMetadataLite(id);
+		if (this.#nextSeqReconciled.has(id)) {
+			return metadata;
+		}
+		return await this.#withSessionLock(id, async () => {
+			const current = await this.#readMetadataLite(id);
+			if (this.#nextSeqReconciled.has(id)) {
+				return current;
+			}
+			return await this.#reconcileNextSeqWithinLock(id, current);
+		});
 	}
 
 	/**
@@ -184,28 +188,38 @@ export class SessionManager {
 		}
 
 		const entries = await readdir(this.#sessionsDir, { withFileTypes: true });
+		const sessionIds = entries
+			.filter((entry) => entry.isDirectory() && isValidSessionId(entry.name))
+			.map((entry) => entry.name);
 		const sessions: Array<SessionListItem> = [];
-		for (const entry of entries) {
-			if (!entry.isDirectory()) {
-				continue;
-			}
-			if (!isValidSessionId(entry.name)) {
-				continue;
-			}
-			try {
-				const metadata = await this.get(entry.name);
-				sessions.push({
-					id: metadata.id,
-					lastMessageAt: metadata.lastMessageAt,
-					messageCount: metadata.messageCount,
-					model: metadata.model,
-					name: metadata.name,
-					source: metadata.source,
-				});
-			} catch {
-				continue;
-			}
-		}
+		let nextIndex = 0;
+		const workerCount = Math.min(listConcurrencyLimit, sessionIds.length);
+
+		await Promise.all(
+			Array.from({ length: workerCount }, async () => {
+				while (nextIndex < sessionIds.length) {
+					const currentIndex = nextIndex;
+					nextIndex += 1;
+					const sessionId = sessionIds[currentIndex];
+					if (sessionId === undefined) {
+						continue;
+					}
+					try {
+						const metadata = await this.#readMetadataLite(sessionId);
+						sessions.push({
+							id: metadata.id,
+							lastMessageAt: metadata.lastMessageAt,
+							messageCount: metadata.messageCount,
+							model: metadata.model,
+							name: metadata.name,
+							source: metadata.source,
+						});
+					} catch {
+						continue;
+					}
+				}
+			}),
+		);
 
 		sessions.sort((left, right) => right.lastMessageAt.localeCompare(left.lastMessageAt));
 		return sessions;
@@ -217,6 +231,8 @@ export class SessionManager {
 	public async delete(id: string): Promise<void> {
 		this.#assertValidSessionId(id);
 		await rm(this.#resolveSessionDir(id), { force: true, recursive: true });
+		this.#contextCache.delete(id);
+		this.#nextSeqReconciled.delete(id);
 	}
 
 	/**
@@ -225,15 +241,17 @@ export class SessionManager {
 	public async appendMessage(id: string, input: AppendMessageInput): Promise<SessionRecord> {
 		this.#assertValidSessionId(id);
 		return await this.#withSessionLock(id, async () => {
-			const records = await readRecords(this.#sessionFilePath(id));
-			const latestSeq = records.reduce((maxSeq, record) => Math.max(maxSeq, record.seq), 0);
+			let metadata = await this.#readMetadataLite(id);
+			if (!this.#nextSeqReconciled.has(id)) {
+				metadata = await this.#reconcileNextSeqWithinLock(id, metadata);
+			}
 			const timestamp = new Date().toISOString();
 			const record: SessionRecord = {
 				content: input.content,
 				recordType: "message",
 				role: input.role,
 				schemaVersion: 1,
-				seq: latestSeq + 1,
+				seq: metadata.nextSeq,
 				timestamp,
 			};
 			if (input.isError !== undefined) {
@@ -242,52 +260,95 @@ export class SessionManager {
 			if (input.toolCallId !== undefined) {
 				record.toolCallId = input.toolCallId;
 			}
+			if (input.toolName !== undefined) {
+				record.toolName = input.toolName;
+			}
 
-			await appendRecord(this.#sessionFilePath(id), record);
+			let metadataWriteSucceeded = false;
+			try {
+				await appendRecord(this.#sessionFilePath(id), record);
+				await this.#writeMetadataAtomic(id, {
+					...metadata,
+					lastMessageAt: timestamp,
+					messageCount: metadata.messageCount + 1,
+					nextSeq: metadata.nextSeq + 1,
+				});
+				metadataWriteSucceeded = true;
+			} finally {
+				if (metadataWriteSucceeded) {
+					this.#nextSeqReconciled.add(id);
+				} else {
+					this.#contextCache.delete(id);
+					this.#nextSeqReconciled.delete(id);
+				}
+			}
 
-			const metadata = await this.get(id);
-			await this.#writeMetadataAtomic(id, {
-				...metadata,
-				lastMessageAt: timestamp,
-				messageCount: metadata.messageCount + 1,
-			});
+			const cached = this.#contextCache.get(id);
+			if (cached !== undefined) {
+				cached.records.push(record);
+				cached.messages.push(recordToMessage(record, this.#defaultModel));
+			}
 
 			return record;
 		});
 	}
 
 	/**
-	 * Rebuilds LLM messages from persisted session records.
+	 * Rebuilds LLM messages from persisted session records without mutating persistence.
 	 */
 	public async buildContext(id: string): Promise<Array<Message>> {
 		this.#assertValidSessionId(id);
 		const context = await this.getContextWithRecords(id);
-		if (!this.#compaction.enabled) {
-			return context.messages;
-		}
+		return context.messages;
+	}
 
-		const contextTokens = this.#estimateContextTokens(context.messages);
-		const limit = this.#contextWindow - this.#compaction.reserveTokens;
-		if (contextTokens <= limit) {
-			return context.messages;
-		}
+	/**
+	 * Rebuilds LLM messages and performs compaction if the context exceeds budget.
+	 */
+	public async buildContextForRun(id: string): Promise<Array<Message>> {
+		this.#assertValidSessionId(id);
+		return await this.#withSessionLock(id, async () => {
+			const context = await this.getContextWithRecords(id);
+			if (!this.#compaction.enabled) {
+				return context.messages;
+			}
 
-		const compacted = await compactSession(this.#compaction, {
-			appendRecord: async (record) => {
-				await appendRecord(this.#sessionFilePath(id), record);
-			},
-			estimateTokens: (text: string) => this.#estimateTokens(text),
-			...(this.#logger === undefined ? {} : { logger: this.#logger }),
-			records: context.records,
-			sessionId: id,
-			...(this.#summarizeCompaction === undefined ? {} : { summarize: this.#summarizeCompaction }),
+			const contextTokens = this.#estimateContextTokens(context.messages);
+			const limit = this.#contextWindow - this.#compaction.reserveTokens;
+			if (contextTokens <= limit) {
+				return context.messages;
+			}
+
+			let compactedRecord: Extract<SessionRecord, { recordType: "compaction" }> | undefined;
+			const compacted = await compactSession(this.#compaction, {
+				appendRecord: async (record) => {
+					compactedRecord = record;
+					await appendRecord(this.#sessionFilePath(id), record);
+				},
+				estimateTokens: (text: string) => this.#estimateTokens(text),
+				...(this.#logger === undefined ? {} : { logger: this.#logger }),
+				records: context.records,
+				sessionId: id,
+				...(this.#summarizeCompaction === undefined
+					? {}
+					: { summarize: this.#summarizeCompaction }),
+			});
+			if (!compacted || compactedRecord === undefined) {
+				return context.messages;
+			}
+
+			const metadata = await this.#readMetadataLite(id);
+			if (metadata.nextSeq <= compactedRecord.seq) {
+				await this.#writeMetadataAtomic(id, {
+					...metadata,
+					nextSeq: compactedRecord.seq + 1,
+				});
+			}
+
+			const refreshed = this.#buildContextFromRecords([...context.records, compactedRecord]);
+			this.#contextCache.set(id, refreshed);
+			return refreshed.messages;
 		});
-		if (!compacted) {
-			return context.messages;
-		}
-
-		const refreshed = await this.getContextWithRecords(id);
-		return refreshed.messages;
 	}
 
 	/**
@@ -295,44 +356,21 @@ export class SessionManager {
 	 */
 	public async getContextWithRecords(id: string): Promise<SessionContext> {
 		this.#assertValidSessionId(id);
+		const cached = this.#contextCache.get(id);
+		if (cached !== undefined) {
+			return {
+				messages: [...cached.messages],
+				records: [...cached.records],
+			};
+		}
+
 		const records = await readRecords(this.#sessionFilePath(id));
-		const latestCompaction = [...records]
-			.reverse()
-			.find(
-				(record): record is Extract<SessionRecord, { recordType: "compaction" }> =>
-					record.recordType === "compaction",
-			);
-
-		const messages: Array<Message> = [];
-		if (latestCompaction !== undefined) {
-			messages.push({
-				content: [
-					{
-						text: [
-							"The conversation history before this point was compacted into the following summary:",
-							"<summary>",
-							latestCompaction.summary,
-							"</summary>",
-						].join("\n"),
-						type: "text",
-					},
-				],
-				role: "user",
-				timestamp: Date.now(),
-			});
-		}
-
-		for (const record of records) {
-			if (record.recordType !== "message") {
-				continue;
-			}
-			if (latestCompaction !== undefined && record.seq < latestCompaction.firstKeptSeq) {
-				continue;
-			}
-			messages.push(this.#recordToMessage(record));
-		}
-
-		return { messages, records };
+		const context = this.#buildContextFromRecords(records);
+		this.#contextCache.set(id, context);
+		return {
+			messages: [...context.messages],
+			records: [...context.records],
+		};
 	}
 
 	/**
@@ -344,11 +382,11 @@ export class SessionManager {
 	): Promise<SessionMetadata> {
 		this.#assertValidSessionId(id);
 		return await this.#withSessionLock(id, async () => {
-			const current = await this.get(id);
-			const next: SessionMetadata = {
+			const current = await this.#readMetadataLite(id);
+			const next = this.#normalizeMetadataForWrite({
 				...current,
 				...patch,
-			};
+			});
 			await this.#writeMetadataAtomic(id, next);
 			return next;
 		});
@@ -363,13 +401,8 @@ export class SessionManager {
 	): Promise<SessionMetadata> {
 		this.#assertValidSessionId(id);
 		return await this.#withSessionLock(id, async () => {
-			const metadata = await this.get(id);
-			const currentMetrics: SessionMetrics = metadata.metrics ?? {
-				totalDurationMs: 0,
-				totalTokens: 0,
-				totalToolCalls: 0,
-				totalTurns: 0,
-			};
+			const metadata = await this.#readMetadataLite(id);
+			const currentMetrics = metadata.metrics;
 			const next: SessionMetadata = {
 				...metadata,
 				metrics: {
@@ -390,7 +423,7 @@ export class SessionManager {
 	public async generateTitle(id: string, options: GenerateTitleOptions): Promise<string> {
 		this.#assertValidSessionId(id);
 		return await this.#withSessionLock(id, async () => {
-			const metadata = await this.get(id);
+			const metadata = await this.#readMetadataLite(id);
 			if (metadata.name !== defaultSessionName) {
 				return metadata.name;
 			}
@@ -426,6 +459,93 @@ export class SessionManager {
 		return join(this.#resolveSessionDir(id), "metadata.json");
 	}
 
+	async #readMetadataLite(id: string): Promise<SessionMetadata> {
+		const metadataPath = this.#metadataFilePath(id);
+		const raw = await readFile(metadataPath, "utf8");
+		const metadata = JSON.parse(raw) as SessionMetadata;
+		return this.#normalizeMetadataForWrite(metadata);
+	}
+
+	#buildContextFromRecords(records: Array<SessionRecord>): SessionContext {
+		const latestCompaction = [...records]
+			.reverse()
+			.find(
+				(record): record is Extract<SessionRecord, { recordType: "compaction" }> =>
+					record.recordType === "compaction",
+			);
+
+		const messages: Array<Message> = [];
+		if (latestCompaction !== undefined) {
+			messages.push({
+				content: [
+					{
+						text: [
+							"The conversation history before this point was compacted into the following summary:",
+							"<summary>",
+							latestCompaction.summary,
+							"</summary>",
+						].join("\n"),
+						type: "text",
+					},
+				],
+				role: "user",
+				timestamp: Date.now(),
+			});
+		}
+
+		for (const record of records) {
+			if (record.recordType !== "message") {
+				continue;
+			}
+			if (latestCompaction !== undefined && record.seq < latestCompaction.firstKeptSeq) {
+				continue;
+			}
+			messages.push(recordToMessage(record, this.#defaultModel));
+		}
+
+		return {
+			messages,
+			records: [...records],
+		};
+	}
+
+	async #reconcileNextSeqWithinLock(
+		id: string,
+		metadata: SessionMetadata,
+	): Promise<SessionMetadata> {
+		const records = await readRecords(this.#sessionFilePath(id));
+		const inferredFromRecords =
+			records.reduce((maxSeq, record) => Math.max(maxSeq, record.seq), 0) + 1;
+		const nextSeq = Math.max(metadata.nextSeq, inferredFromRecords);
+		let normalized = metadata;
+		if (nextSeq !== metadata.nextSeq) {
+			normalized = {
+				...metadata,
+				nextSeq,
+			};
+			await this.#writeMetadataAtomic(id, normalized);
+		}
+		this.#nextSeqReconciled.add(id);
+		return normalized;
+	}
+
+	#normalizeMetadataForWrite(metadata: SessionMetadata): SessionMetadata {
+		const messageCount = Number.isFinite(metadata.messageCount) ? metadata.messageCount : 0;
+		const inferredNextSeq = Math.max(1, Math.floor(messageCount) + 1);
+		const nextSeq =
+			typeof metadata.nextSeq === "number" &&
+			Number.isFinite(metadata.nextSeq) &&
+			metadata.nextSeq > 0
+				? Math.floor(metadata.nextSeq)
+				: inferredNextSeq;
+		const metrics = metadata.metrics ?? defaultSessionMetrics();
+		return {
+			...metadata,
+			metrics,
+			nextSeq,
+		};
+	}
+
 	#estimateContextTokens(messages: Array<Message>): number {
 		return messages.reduce((total, message) => {
 			const text = (
@@ -442,67 +562,6 @@ export class SessionManager {
 
 	#estimateTokens(text: string): number {
 		return Math.max(1, Math.ceil(text.length / 4));
-	}
-
-	#recordToMessage(record: Extract<SessionRecord, { recordType: "message" }>): Message {
-		const asTextContent = record.content
-			.filter((entry): entry is Extract<ContentBlock, { type: "text" }> => entry.type === "text")
-			.map((entry) => ({ text: entry.text, type: "text" as const }));
-
-		if (record.role === "toolResult") {
-			return {
-				content: asTextContent,
-				isError: record.isError ?? false,
-				role: "toolResult",
-				timestamp: Date.parse(record.timestamp),
-				toolCallId: record.toolCallId ?? "",
-				toolName: "tool",
-			};
-		}
-
-		if (record.role === "user") {
-			return {
-				content: asTextContent,
-				role: "user",
-				timestamp: Date.parse(record.timestamp),
-			};
-		}
-
-		const assistantContent = record.content.map((entry) => {
-			if (entry.type === "text") {
-				return { text: entry.text, type: "text" as const };
-			}
-			return {
-				arguments: entry.arguments,
-				id: entry.id,
-				name: entry.name,
-				type: "toolCall" as const,
-			};
-		});
-
-		return {
-			api: persistedAssistantApi,
-			content: assistantContent,
-			model: this.#defaultModel,
-			provider: persistedAssistantProvider,
-			role: "assistant",
-			stopReason: "stop",
-			timestamp: Date.parse(record.timestamp),
-			usage: {
-				cacheRead: 0,
-				cacheWrite: 0,
-				cost: {
-					cacheRead: 0,
-					cacheWrite: 0,
-					input: 0,
-					output: 0,
-					total: 0,
-				},
-				input: 0,
-				output: 0,
-				totalTokens: 0,
-			},
-		};
 	}
 
 	#resolveSessionDir(id: string): string {
@@ -556,8 +615,9 @@ export class SessionManager {
 	async #writeMetadataAtomic(id: string, metadata: SessionMetadata): Promise<void> {
 		const metadataPath = this.#metadataFilePath(id);
 		const tempPath = `${metadataPath}.tmp`;
+		const normalized = this.#normalizeMetadataForWrite(metadata);
 		await mkdir(dirname(metadataPath), { recursive: true });
-		await writeFile(tempPath, JSON.stringify(metadata, null, 2), "utf8");
+		await writeFile(tempPath, JSON.stringify(normalized, null, 2), "utf8");
 		await rename(tempPath, metadataPath);
 	}
 }

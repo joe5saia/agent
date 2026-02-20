@@ -1,6 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import { createLogger, rotateIfNeeded } from "../src/logging/index.js";
 
@@ -46,7 +47,7 @@ describe("log rotation", () => {
 		expect(existsSync(join(directory, "agent.2026-02-15.log"))).toBe(true);
 	});
 
-	it("logger invokes rotation before writes", () => {
+	it("logger persists logs via async queue", async () => {
 		const directory = createTempDirectory();
 		const logPath = join(directory, "agent.log");
 		const logger = createLogger(
@@ -63,6 +64,7 @@ describe("log rotation", () => {
 			},
 		);
 		logger.info("event", { a: 1 });
+		await sleep(20);
 		expect(readFileSync(logPath, "utf8")).toContain('"event":"event"');
 	});
 });

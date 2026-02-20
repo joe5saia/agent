@@ -28,6 +28,7 @@ export type SessionRecord =
 			seq: number;
 			timestamp: string;
 			toolCallId?: string;
+			toolName?: string;
 	  }
 	| {
 			firstKeptSeq: number;
@@ -53,6 +54,7 @@ export interface SessionMetadata {
 	metrics: SessionMetrics;
 	model: string;
 	name: string;
+	nextSeq: number;
 	source: "cron" | "interactive";
 	systemPromptOverride?: string;
 }

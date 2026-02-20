@@ -125,4 +125,48 @@ describe("ws runtime", () => {
 		client.close();
 		await server.close();
 	});
+
+	it("emits a single queue-full error to the requesting client", async () => {
+		const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+		const deps = createServerDeps(events);
+		const created = await deps.sessionManager.create();
+		deps.runAgentLoop = async (messages) => {
+			await sleep(100);
+			return [...messages, assistantMessage("ok")];
+		};
+
+		const server = await startServer(
+			createConfig({ server: { host: "127.0.0.1", port: 0 } }),
+			deps,
+			{ maxWsQueueDepth: 1 },
+		);
+		const address = server.httpServer.address();
+		if (address === null || typeof address === "string") {
+			throw new Error("Expected TCP address");
+		}
+
+		const client = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+		await new Promise<void>((resolve, reject) => {
+			client.once("open", () => resolve());
+			client.once("error", reject);
+		});
+
+		const payloads: Array<{ error?: string; type: string }> = [];
+		client.on("message", (buffer) => {
+			payloads.push(JSON.parse(buffer.toString("utf8")) as { error?: string; type: string });
+		});
+
+		client.send(JSON.stringify({ content: "one", sessionId: created.id, type: "send_message" }));
+		client.send(JSON.stringify({ content: "two", sessionId: created.id, type: "send_message" }));
+		await sleep(200);
+
+		const queueErrors = payloads.filter(
+			(entry) =>
+				entry.type === "error" && entry.error === "Session queue is full. Please retry later.",
+		);
+		expect(queueErrors).toHaveLength(1);
+
+		client.close();
+		await server.close();
+	});
 });

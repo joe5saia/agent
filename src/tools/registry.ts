@@ -4,6 +4,7 @@ import type { AgentTool, ToolSchema } from "./types.js";
  * In-memory registry of available tools.
  */
 export class ToolRegistry {
+	#cachedToolSchemas: Array<ToolSchema> | undefined;
 	readonly #toolsByName = new Map<string, AgentTool>();
 
 	/**
@@ -14,6 +15,7 @@ export class ToolRegistry {
 			throw new Error(`Tool is already registered: ${tool.name}`);
 		}
 		this.#toolsByName.set(tool.name, tool);
+		this.#cachedToolSchemas = undefined;
 	}
 
 	/**
@@ -21,13 +23,18 @@ export class ToolRegistry {
 	 */
 	public clear(): void {
 		this.#toolsByName.clear();
+		this.#cachedToolSchemas = undefined;
 	}
 
 	/**
 	 * Removes a registered tool by name.
 	 */
 	public unregister(name: string): boolean {
-		return this.#toolsByName.delete(name);
+		const deleted = this.#toolsByName.delete(name);
+		if (deleted) {
+			this.#cachedToolSchemas = undefined;
+		}
+		return deleted;
 	}
 
 	/**
@@ -48,11 +55,14 @@ export class ToolRegistry {
 	 * Converts tools to LLM-facing schemas.
 	 */
 	public toToolSchemas(): Array<ToolSchema> {
-		return this.list().map((tool) => ({
-			description: tool.description,
-			name: tool.name,
-			parameters: tool.parameters,
-		}));
+		if (this.#cachedToolSchemas === undefined) {
+			this.#cachedToolSchemas = this.list().map((tool) => ({
+				description: tool.description,
+				name: tool.name,
+				parameters: tool.parameters,
+			}));
+		}
+		return this.#cachedToolSchemas;
 	}
 
 	/**

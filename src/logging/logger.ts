@@ -1,9 +1,10 @@
-import { appendFileSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
+import { appendFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentConfig } from "../config/index.js";
 import { redactValue, type RedactableValue } from "./redaction.js";
-import { rotateIfNeeded } from "./rotation.js";
+import { rotateIfNeededAsync } from "./rotation.js";
 
 /**
  * Supported log levels in ascending verbosity order.
@@ -43,6 +44,8 @@ interface LoggerDependencies {
 	writeStdout: (line: string) => void;
 }
 
+const rotationCheckIntervalMs = 10_000;
+
 const logLevelPriority: Record<LogLevel, number> = {
 	debug: 10,
 	error: 40,
@@ -78,6 +81,29 @@ export function createLogger(
 	const now = dependencies?.now ?? (() => new Date());
 	const writeStdout =
 		dependencies?.writeStdout ?? ((line: string) => process.stdout.write(`${line}\n`));
+	let pendingWrite = Promise.resolve();
+	let lastRotationQueuedAt = 0;
+
+	const queueOperation = (operation: () => Promise<void>): void => {
+		pendingWrite = pendingWrite
+			.then(async () => {
+				await operation();
+			})
+			.catch(() => {
+				// Logging must never throw into runtime call paths.
+			});
+	};
+
+	const maybeQueueRotation = (): void => {
+		const currentTime = now();
+		if (currentTime.getTime() - lastRotationQueuedAt < rotationCheckIntervalMs) {
+			return;
+		}
+		lastRotationQueuedAt = currentTime.getTime();
+		queueOperation(async () => {
+			await rotateIfNeededAsync(filePath, config.rotation, currentTime);
+		});
+	};
 
 	const write = (level: LogLevel, event: string, fields?: Record<string, JsonValue>): void => {
 		if (logLevelPriority[level] < logLevelPriority[selectedLevel]) {
@@ -96,8 +122,10 @@ export function createLogger(
 		if (config.stdout) {
 			writeStdout(line);
 		}
-		rotateIfNeeded(filePath, config.rotation, now());
-		appendFileSync(filePath, `${line}\n`, "utf8");
+		maybeQueueRotation();
+		queueOperation(async () => {
+			await appendFile(filePath, `${line}\n`, "utf8");
+		});
 	};
 
 	return {

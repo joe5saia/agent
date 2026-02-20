@@ -1,4 +1,5 @@
 import { readdirSync, renameSync, statSync, unlinkSync } from "node:fs";
+import { readdir, rename, stat, unlink } from "node:fs/promises";
 import { basename, dirname, extname, join } from "node:path";
 
 export interface RotationConfig {
@@ -67,6 +68,58 @@ export function rotateIfNeeded(
 		if (now.getTime() - stamp.getTime() > maxAgeMs) {
 			try {
 				unlinkSync(join(directory, filename));
+			} catch {
+				// Ignore retention cleanup errors.
+			}
+		}
+	}
+}
+
+/**
+ * Async variant used by the runtime logger to avoid blocking the event loop.
+ */
+export async function rotateIfNeededAsync(
+	logPath: string,
+	config: RotationConfig,
+	now: Date = new Date(),
+): Promise<void> {
+	let stats: Awaited<ReturnType<typeof stat>> | undefined;
+	try {
+		stats = await stat(logPath);
+	} catch {
+		stats = undefined;
+	}
+	if (stats === undefined || !stats.isFile()) {
+		return;
+	}
+
+	const directory = dirname(logPath);
+	const extension = extname(logPath) || ".log";
+	const stem = basename(logPath, extension);
+	const archivePath = join(directory, `${stem}.${dateStamp(now)}${extension}`);
+	const maxSizeBytes = config.maxSizeMb * 1024 * 1024;
+	const modifiedDate = dateStamp(stats.mtime);
+	const shouldRotate = modifiedDate !== dateStamp(now) || stats.size > maxSizeBytes;
+	if (shouldRotate) {
+		try {
+			await rename(logPath, archivePath);
+		} catch {
+			// Best effort rotation; writing continues to current file on failure.
+		}
+	}
+
+	const maxAgeMs = config.maxDays * 24 * 60 * 60 * 1000;
+	for (const filename of await readdir(directory)) {
+		if (!filename.startsWith(`${stem}.`) || !filename.endsWith(extension)) {
+			continue;
+		}
+		const stamp = extractDateFromName(filename);
+		if (stamp === undefined) {
+			continue;
+		}
+		if (now.getTime() - stamp.getTime() > maxAgeMs) {
+			try {
+				await unlink(join(directory, filename));
 			} catch {
 				// Ignore retention cleanup errors.
 			}

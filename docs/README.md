@@ -6,22 +6,23 @@ Project documentation for all contributors and agents. Files in this directory s
 
 <!-- Add entries here as documents are created. Keep sorted alphabetically. -->
 
-| Document                                               | Description                                                            |
-| ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [deployment-guide.md](deployment-guide.md)             | VM deployment, systemd service setup, Tailscale exposure, operations   |
-| [implementation-plan.md](implementation-plan.md)       | Ordered build plan with tasks, deliverables, and acceptance criteria   |
-| [known-bugs.md](known-bugs.md)                         | Open correctness/security regressions tracked for follow-up fixes      |
-| [onboarding-setup.md](onboarding-setup.md)             | New-user setup for Claude/Codex tokens and Docker Compose on VM/laptop |
-| [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                |
-| [spec-automation.md](spec-automation.md)               | Cron scheduled triggers and structured workflows (§8–§9)               |
-| [spec-configuration.md](spec-configuration.md)         | Configuration validation and session naming UX (§17–§18)               |
-| [spec-overview.md](spec-overview.md)                   | Goals, methodology, and architecture overview (§1–§3)                  |
-| [spec-project-structure.md](spec-project-structure.md) | Source layout, milestones, deployment, inspirations (§19–§22)          |
-| [spec-security.md](spec-security.md)                   | Security model and storage/persistence (§11–§12)                       |
-| [spec-sessions.md](spec-sessions.md)                   | Session & thread management, JSONL format, compaction (§7)             |
-| [spec-system-prompt.md](spec-system-prompt.md)         | System prompt assembly, logging, and error handling (§13–§15)          |
-| [spec-technology-stack.md](spec-technology-stack.md)   | Runtime, dependencies, linting, formatting, testing (§4)               |
-| [spec-web-interface.md](spec-web-interface.md)         | Web interface, REST API, WebSocket protocol, Hono framework (§10, §16) |
+| Document                                               | Description                                                                          |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| [architecture-review-v1.md](architecture-review-v1.md) | V1 launch readiness review of architecture, module boundaries, and performance risks |
+| [deployment-guide.md](deployment-guide.md)             | VM deployment, systemd service setup, Tailscale exposure, operations                 |
+| [implementation-plan.md](implementation-plan.md)       | Ordered build plan with tasks, deliverables, and acceptance criteria                 |
+| [known-bugs.md](known-bugs.md)                         | Open correctness/security regressions tracked for follow-up fixes                    |
+| [onboarding-setup.md](onboarding-setup.md)             | New-user setup for Claude/Codex tokens and Docker Compose on VM/laptop               |
+| [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                              |
+| [spec-automation.md](spec-automation.md)               | Cron scheduled triggers and structured workflows (§8–§9)                             |
+| [spec-configuration.md](spec-configuration.md)         | Configuration validation and session naming UX (§17–§18)                             |
+| [spec-overview.md](spec-overview.md)                   | Goals, methodology, and architecture overview (§1–§3)                                |
+| [spec-project-structure.md](spec-project-structure.md) | Source layout, milestones, deployment, inspirations (§19–§22)                        |
+| [spec-security.md](spec-security.md)                   | Security model and storage/persistence (§11–§12)                                     |
+| [spec-sessions.md](spec-sessions.md)                   | Session & thread management, JSONL format, compaction (§7)                           |
+| [spec-system-prompt.md](spec-system-prompt.md)         | System prompt assembly, logging, and error handling (§13–§15)                        |
+| [spec-technology-stack.md](spec-technology-stack.md)   | Runtime, dependencies, linting, formatting, testing (§4)                             |
+| [spec-web-interface.md](spec-web-interface.md)         | Web interface, REST API, WebSocket protocol, Hono framework (§10, §16)               |
 
 ## Style Guidelines
 
