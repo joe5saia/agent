@@ -148,7 +148,7 @@ describeIntegration("integration: agent websocket e2e", () => {
 			);
 			runningServers.push(server);
 
-			const createResponse = await server.app.request("/api/sessions", { method: "POST" });
+			const createResponse = await server.app.request("/agent_api/sessions", { method: "POST" });
 			expect(createResponse.status).toBe(200);
 			const created = (await createResponse.json()) as { id: string };
 
@@ -157,7 +157,7 @@ describeIntegration("integration: agent websocket e2e", () => {
 				throw new Error("Failed to resolve listening address.");
 			}
 			const socket = new WebSocket(
-				`ws://127.0.0.1:${String(address.port)}/ws?sessionId=${created.id}`,
+				`ws://127.0.0.1:${String(address.port)}/agent_ws?sessionId=${created.id}`,
 			);
 			await new Promise<void>((resolve, reject) => {
 				socket.addEventListener("open", () => resolve());

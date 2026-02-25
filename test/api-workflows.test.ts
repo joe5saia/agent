@@ -38,19 +38,21 @@ describe("workflows api", () => {
 		deps.workflowEngine = workflowEngine;
 
 		const app = createApp(createConfig(), deps);
-		const listResponse = await app.request("/api/workflows");
+		const listResponse = await app.request("/agent_api/workflows");
 		expect(listResponse.status).toBe(200);
 		const list = (await listResponse.json()) as Array<{ name: string }>;
 		expect(list.some((entry) => entry.name === "deploy")).toBe(true);
 
-		const runResponse = await app.request("/api/workflows/deploy/run", {
+		const runResponse = await app.request("/agent_api/workflows/deploy/run", {
 			body: JSON.stringify({ parameters: {} }),
 			headers: { "Content-Type": "application/json" },
 			method: "POST",
 		});
 		expect(runResponse.status).toBe(200);
 
-		const missingResponse = await app.request("/api/workflows/missing/run", { method: "POST" });
+		const missingResponse = await app.request("/agent_api/workflows/missing/run", {
+			method: "POST",
+		});
 		expect(missingResponse.status).toBe(404);
 	});
 });

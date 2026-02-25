@@ -4,6 +4,8 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-25:** Updated server/frontend route prefixes for reverse-proxy path hosting: UI now served at `/agent`, health at `/agent_health`, API under `/agent_api/*`, and WebSocket at `/agent_ws`. Updated tests and deployment health checks accordingly. Verification: `npm run check` and `npm test`.
+- **2026-02-20:** Added `scripts/deploy-kittenserver.sh` for SSH/rsync-based deployment to the existing Docker Compose runtime on `kittenserver`, with safe defaults (preserve remote compose/env), optional compose sync/delete/no-build flags, and post-deploy health check.
 - **2026-02-20:** Completed Pi tool parity implementation across tasks P1-P5: added canonical built-ins (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`), compatibility aliases with deprecation warnings and removal milestone, cron policy alias normalization, compaction tool-name normalization, and expanded tool/cron/compaction tests. Verification: `npm run check`, `npm test`, `npm test -- tools`, `npm test -- cron`, `npm test -- sessions`, `npm test -- compaction`.
 - **2026-02-20:** Updated tool specs for Pi-style built-ins (`read`, `write`, `edit`, `bash`, `grep`, `find`, `ls`) and migration aliases in `docs/spec-agent-loop.md`, `docs/spec-automation.md`, `docs/spec-sessions.md`, and `docs/spec-project-structure.md`.
 - **2026-02-20:** Updated chat composer keyboard behavior so plain Enter inserts a newline and Cmd+Enter submits the message (`public/app.js`).

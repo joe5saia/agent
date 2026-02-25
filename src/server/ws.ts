@@ -5,6 +5,7 @@ import { WebSocket, WebSocketServer, type RawData } from "ws";
 import { agentLoop } from "../agent/index.js";
 import type { RetryStatusEvent } from "../agent/index.js";
 import { assistantText, isValidSessionId, toSessionAppendInput } from "../sessions/index.js";
+import { serverPaths } from "./paths.js";
 import type { ServerDependencies } from "./types.js";
 
 interface SendMessagePayload {
@@ -113,7 +114,7 @@ export class WsRuntime {
 	public attachUpgradeHandler(request: IncomingMessage, socket: Duplex): boolean {
 		const host = request.headers.host ?? "127.0.0.1";
 		const url = new URL(request.url ?? "/", `http://${host}`);
-		if (url.pathname !== "/ws") {
+		if (url.pathname !== serverPaths.ws) {
 			return false;
 		}
 

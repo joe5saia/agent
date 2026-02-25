@@ -62,7 +62,7 @@ describe("ws runtime", () => {
 			throw new Error("Expected TCP address");
 		}
 
-		const client = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+		const client = new WebSocket(`ws://127.0.0.1:${address.port}/agent_ws`);
 		await new Promise<void>((resolve, reject) => {
 			client.once("open", () => resolve());
 			client.once("error", reject);
@@ -110,7 +110,7 @@ describe("ws runtime", () => {
 			throw new Error("Expected TCP address");
 		}
 
-		const client = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+		const client = new WebSocket(`ws://127.0.0.1:${address.port}/agent_ws`);
 		await new Promise<void>((resolve, reject) => {
 			client.once("open", () => resolve());
 			client.once("error", reject);
@@ -145,7 +145,7 @@ describe("ws runtime", () => {
 			throw new Error("Expected TCP address");
 		}
 
-		const client = new WebSocket(`ws://127.0.0.1:${address.port}/ws`);
+		const client = new WebSocket(`ws://127.0.0.1:${address.port}/agent_ws`);
 		await new Promise<void>((resolve, reject) => {
 			client.once("open", () => resolve());
 			client.once("error", reject);

@@ -44,7 +44,7 @@ function ensureSocket() {
 	}
 
 	const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-	state.ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+	state.ws = new WebSocket(`${protocol}//${window.location.host}/agent_ws`);
 	state.ws.onmessage = (event) => {
 		const payload = JSON.parse(event.data);
 		if (payload.sessionId !== state.activeSessionId) {
@@ -102,7 +102,7 @@ function ensureSocket() {
 }
 
 async function loadSessions() {
-	const response = await fetch("/api/sessions");
+	const response = await fetch("/agent_api/sessions");
 	state.sessions = await response.json();
 	renderSessions();
 }
@@ -111,7 +111,7 @@ async function openSession(sessionId) {
 	state.activeSessionId = sessionId;
 	renderSessions();
 	messagesNode.innerHTML = "";
-	const response = await fetch(`/api/sessions/${sessionId}`);
+	const response = await fetch(`/agent_api/sessions/${sessionId}`);
 	const payload = await response.json();
 	for (const message of payload.messages) {
 		if (message.role === "user") {
@@ -133,7 +133,7 @@ async function openSession(sessionId) {
 }
 
 async function createSession() {
-	const response = await fetch("/api/sessions", {
+	const response = await fetch("/agent_api/sessions", {
 		body: JSON.stringify({}),
 		headers: { "Content-Type": "application/json" },
 		method: "POST",

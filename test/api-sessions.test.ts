@@ -12,7 +12,7 @@ describe("sessions api", () => {
 		const deps = createServerDeps(events);
 		const app = createApp(createConfig(), deps);
 
-		const createResponse = await app.request("/api/sessions", {
+		const createResponse = await app.request("/agent_api/sessions", {
 			body: JSON.stringify({ name: "Test Session" }),
 			headers: { "Content-Type": "application/json" },
 			method: "POST",
@@ -21,15 +21,17 @@ describe("sessions api", () => {
 		const created = (await createResponse.json()) as { id: string; name: string };
 		expect(created.name).toBe("Test Session");
 
-		const listResponse = await app.request("/api/sessions");
+		const listResponse = await app.request("/agent_api/sessions");
 		expect(listResponse.status).toBe(200);
 		const sessions = (await listResponse.json()) as Array<{ id: string }>;
 		expect(sessions.some((session) => session.id === created.id)).toBe(true);
 
-		const getResponse = await app.request(`/api/sessions/${created.id}`);
+		const getResponse = await app.request(`/agent_api/sessions/${created.id}`);
 		expect(getResponse.status).toBe(200);
 
-		const deleteResponse = await app.request(`/api/sessions/${created.id}`, { method: "DELETE" });
+		const deleteResponse = await app.request(`/agent_api/sessions/${created.id}`, {
+			method: "DELETE",
+		});
 		expect(deleteResponse.status).toBe(204);
 	});
 
@@ -37,14 +39,14 @@ describe("sessions api", () => {
 		const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
 		const app = createApp(createConfig(), createServerDeps(events));
 
-		const invalidBody = await app.request("/api/sessions", {
+		const invalidBody = await app.request("/agent_api/sessions", {
 			body: JSON.stringify({ name: "" }),
 			headers: { "Content-Type": "application/json" },
 			method: "POST",
 		});
 		expect(invalidBody.status).toBe(400);
 
-		const invalidId = await app.request("/api/sessions/not-valid");
+		const invalidId = await app.request("/agent_api/sessions/not-valid");
 		expect(invalidId.status).toBe(400);
 	});
 });

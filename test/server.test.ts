@@ -11,7 +11,7 @@ describe("server app", () => {
 		const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
 		const app = createApp(createConfig(), createServerDeps(events));
 
-		const response = await app.request("/health");
+		const response = await app.request("/agent_health");
 		expect(response.status).toBe(200);
 		expect(await response.json()).toEqual({ ok: true });
 	});
@@ -29,14 +29,14 @@ describe("server app", () => {
 		});
 		const app = createApp(config, createServerDeps(events));
 
-		const forbidden = await app.request("/health", {
+		const forbidden = await app.request("/agent_health", {
 			headers: {
 				"x-forwarded-for": "100.64.0.5",
 			},
 		});
 		expect(forbidden.status).toBe(403);
 
-		const allowed = await app.request("/health", {
+		const allowed = await app.request("/agent_health", {
 			headers: {
 				"Tailscale-User-Login": "alice@example.com",
 				"x-forwarded-for": "100.64.0.5",

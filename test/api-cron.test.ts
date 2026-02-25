@@ -31,18 +31,18 @@ describe("cron api", () => {
 		deps.cronService = cronService;
 		const app = createApp(createConfig(), deps);
 
-		const listResponse = await app.request("/api/cron");
+		const listResponse = await app.request("/agent_api/cron");
 		expect(listResponse.status).toBe(200);
 		const list = (await listResponse.json()) as Array<{ id: string }>;
 		expect(list.some((entry) => entry.id === "job")).toBe(true);
 
-		const pauseResponse = await app.request("/api/cron/job/pause", { method: "POST" });
+		const pauseResponse = await app.request("/agent_api/cron/job/pause", { method: "POST" });
 		expect(pauseResponse.status).toBe(200);
 
-		const resumeResponse = await app.request("/api/cron/job/resume", { method: "POST" });
+		const resumeResponse = await app.request("/agent_api/cron/job/resume", { method: "POST" });
 		expect(resumeResponse.status).toBe(200);
 
-		const missing = await app.request("/api/cron/does-not-exist/pause", { method: "POST" });
+		const missing = await app.request("/agent_api/cron/does-not-exist/pause", { method: "POST" });
 		expect(missing.status).toBe(404);
 
 		cronService.stop();

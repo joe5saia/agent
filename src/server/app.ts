@@ -2,6 +2,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import type { AgentConfig } from "../config/index.js";
 import { identityMiddleware } from "./middleware/identity.js";
+import { agentApiPath, serverPaths } from "./paths.js";
 import { createCronRoutes } from "./routes/cron.js";
 import { createSessionsRoutes } from "./routes/sessions.js";
 import { createWorkflowsRoutes } from "./routes/workflows.js";
@@ -38,20 +39,20 @@ export function createApp(
 	});
 
 	app.use("*", identityMiddleware);
-	app.get("/health", (context) => context.json({ ok: true }));
+	app.get(serverPaths.health, (context) => context.json({ ok: true }));
 
-	app.get("/ui", (context) => context.redirect("/ui/"));
+	app.get(serverPaths.ui, (context) => context.redirect(`${serverPaths.ui}/`));
 	app.use(
-		"/ui/*",
+		`${serverPaths.ui}/*`,
 		serveStatic({
-			rewriteRequestPath: (path) => path.replace(/^\/ui\//, ""),
+			rewriteRequestPath: (path) => path.replace(/^\/agent\//, ""),
 			root: "./public",
 		}),
 	);
 
-	app.route("/api/sessions", createSessionsRoutes());
-	app.route("/api/cron", createCronRoutes());
-	app.route("/api/workflows", createWorkflowsRoutes());
+	app.route(agentApiPath("/sessions"), createSessionsRoutes());
+	app.route(agentApiPath("/cron"), createCronRoutes());
+	app.route(agentApiPath("/workflows"), createWorkflowsRoutes());
 
 	return app;
 }
