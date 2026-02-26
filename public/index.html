@@ -16,12 +16,25 @@
 				<ul id="session-list"></ul>
 			</aside>
 			<main class="chat">
+				<header class="chat-header">
+					<button
+						id="toggle-sidebar"
+						type="button"
+						class="ghost-button"
+						aria-expanded="true"
+						aria-controls="session-list"
+					>
+						Hide Sessions
+					</button>
+				</header>
 				<div id="messages" class="messages"></div>
 				<form id="composer" class="composer">
-					<textarea id="prompt" rows="3" placeholder="Send a message"></textarea>
-					<div class="actions">
-						<button id="send" type="submit">Send</button>
-						<button id="cancel" type="button" hidden>Cancel</button>
+					<div class="composer-inner">
+						<textarea id="prompt" rows="3" placeholder="Send a message"></textarea>
+						<div class="actions">
+							<button id="send" type="submit">Send</button>
+							<button id="cancel" type="button" hidden>Cancel</button>
+						</div>
 					</div>
 				</form>
 			</main>

@@ -14,6 +14,69 @@ const composerNode = document.querySelector("#composer");
 const promptNode = document.querySelector("#prompt");
 const cancelButtonNode = document.querySelector("#cancel");
 const newSessionNode = document.querySelector("#new-session");
+const layoutNode = document.querySelector(".layout");
+const sidebarToggleNode = document.querySelector("#toggle-sidebar");
+const mobileBreakpointQuery = window.matchMedia("(max-width: 768px)");
+const sidebarPreferenceKey = "agent.ui.sidebarCollapsed";
+
+// Read persisted sidebar state; null means no saved preference.
+function readSidebarPreference() {
+	try {
+		const rawValue = window.localStorage.getItem(sidebarPreferenceKey);
+		if (rawValue === "true") {
+			return true;
+		}
+		if (rawValue === "false") {
+			return false;
+		}
+		return null;
+	} catch {
+		return null;
+	}
+}
+
+// Persist explicit user sidebar preference across page loads.
+function writeSidebarPreference(collapsed) {
+	try {
+		window.localStorage.setItem(sidebarPreferenceKey, String(collapsed));
+	} catch {
+		/* Ignore storage access issues and keep in-memory behavior. */
+	}
+}
+
+// Keep sidebar state checks centralized to avoid scattered class queries.
+function isSidebarCollapsed() {
+	return layoutNode.classList.contains("sidebar-collapsed");
+}
+
+// Apply sidebar state and keep accessibility attributes synchronized.
+function setSidebarCollapsed(collapsed, persistPreference) {
+	layoutNode.classList.toggle("sidebar-collapsed", collapsed);
+	sidebarToggleNode.setAttribute("aria-expanded", String(!collapsed));
+	sidebarToggleNode.textContent = collapsed ? "Show Sessions" : "Hide Sessions";
+
+	if (persistPreference) {
+		writeSidebarPreference(collapsed);
+	}
+}
+
+// Default behavior: collapsed on mobile, expanded on desktop unless user overrides.
+function initializeSidebar() {
+	const preferredState = readSidebarPreference();
+	const initialState = preferredState ?? mobileBreakpointQuery.matches;
+	setSidebarCollapsed(initialState, false);
+
+	sidebarToggleNode.addEventListener("click", () => {
+		setSidebarCollapsed(!isSidebarCollapsed(), true);
+	});
+
+	mobileBreakpointQuery.addEventListener("change", (event) => {
+		if (readSidebarPreference() !== null) {
+			return;
+		}
+		setSidebarCollapsed(event.matches, false);
+	});
+}
 
 function renderSessions() {
 	sessionListNode.innerHTML = "";
@@ -179,6 +242,7 @@ newSessionNode.addEventListener("click", () => {
 	void createSession();
 });
 
+initializeSidebar();
 await loadSessions();
 if (state.sessions.length === 0) {
 	await createSession();
