@@ -21,12 +21,18 @@ afterEach(() => {
 describe("isBlockedCommand", () => {
 	it("S11.2: blocks dangerous commands", () => {
 		expect(isBlockedCommand("rm -rf /")).toMatchObject({ blocked: true });
-		expect(isBlockedCommand("sudo reboot")).toMatchObject({ blocked: true });
 		expect(isBlockedCommand("dd if=/dev/zero of=/dev/disk1")).toMatchObject({ blocked: true });
 		expect(isBlockedCommand("chmod 777 /tmp/file")).toMatchObject({ blocked: true });
 		expect(isBlockedCommand("git push --force origin main")).toMatchObject({ blocked: true });
 		expect(isBlockedCommand("git push origin main --force")).toMatchObject({ blocked: true });
 		expect(isBlockedCommand("git push origin master -f")).toMatchObject({ blocked: true });
+	});
+
+	it("allows sudo unless blocked by configured patterns", () => {
+		expect(isBlockedCommand("sudo whoami")).toEqual({ blocked: false });
+		expect(isBlockedCommand("sudo whoami", [String.raw`^sudo(?:\s|$)`])).toMatchObject({
+			blocked: true,
+		});
 	});
 
 	it("S11.10: catches rm -rf /* variants", () => {

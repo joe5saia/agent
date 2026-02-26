@@ -29,13 +29,12 @@ Security is layered: network boundary, authentication, and runtime safeguards.
 The blocklist is a secondary safety layer. The primary protection is structured command execution ([§6.3](spec-agent-loop.md#63-cli-tool-registration)) for CLI tools and the environment allowlist for subprocesses. The blocklist catches dangerous patterns in the `bash` built-in tool:
 
 - `rm -rf /`, `rm -rf ~`, `rm -rf *` (and variants like `rm -rf /*`)
-- `sudo` (any command)
 - `shutdown`, `reboot`, `halt`
 - `mkfs`, `dd if=`
 - `git push --force` (to main/master)
 - `chmod 777`
 
-The blocklist uses pattern matching (not exact string match) to catch common evasion attempts. However, it is inherently bypassable — the env allowlist and filesystem boundaries are the real security boundary.
+The blocklist uses pattern matching (not exact string match) to catch common evasion attempts. Additional patterns can be configured via `security.blocked_commands` (for example, `^sudo(?:\\s|$)` if sudo should be denied). However, it is inherently bypassable — the env allowlist and filesystem boundaries are the real security boundary.
 
 **Environment variable allowlist** — subprocesses receive only explicitly allowed variables (see [§6.4](spec-agent-loop.md#64-tool-execution-safety)). No secret material is inherited.
 
@@ -139,7 +138,6 @@ tools:
 security:
   blocked_commands:
     - "rm -rf"
-    - "sudo"
     - "shutdown"
     - "reboot"
     - "mkfs"

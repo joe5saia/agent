@@ -4,6 +4,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-26:** Updated container/runtime privilege behavior so `sudo` is no longer hard-blocked by built-in command filtering (it can still be blocked via `security.blocked_commands`), and Docker runtime now installs/configures passwordless sudo for the `agent` user inside the container. Updated security/tooling specs and tests accordingly. Verification: `npm run check` and `npm test`.
 - **2026-02-26:** Updated web UI conversation ergonomics: the sessions sidebar now has independent scroll behavior with sticky/full-height layout, is collapsible via a chat-header toggle with persisted preference (mobile defaults to collapsed), and chat content width is constrained responsively for readability on desktop while remaining full-width usable on mobile. Verification: `npm run check`.
 - **2026-02-25:** Implemented universal prompt file control with `system_prompt.system_file`, `system_prompt.soul_file`, and `system_prompt.strict_prompt_files`; added strict/fallback file loading, legacy `identity_file` compatibility mode with deprecation warnings, subordinate soul-style section insertion, runtime warning logs, and test coverage updates for prompt/config behavior. Verification: `npm run check` and `npm test`.
 - **2026-02-25:** Extended skills to full three-layer progressive disclosure (Codex-style): layer 1 metadata catalog (`name`, `description`), layer 2 active `SKILL.md` body injection, and layer 3 on-demand bundled resource excerpts from `references/`, `scripts/`, `assets/`, and linked local files. Added per-turn resource selection heuristics and bounded snippet loading with warnings for unreadable/non-text resources. Verification: `npm run check` and `npm test`.
@@ -249,7 +250,7 @@ Build the four security modules: command blocklist, environment allowlist, path 
 
 **Behavior:**
 
-- **Command filter:** pattern-matches against the configured blocklist. Catches `rm -rf /`, `rm -rf /*`, `sudo *`, `shutdown`, `reboot`, `mkfs`, `dd if=`, `chmod 777`, `git push --force` to main/master. Uses regex, not exact string match.
+- **Command filter:** pattern-matches against the configured blocklist. Catches `rm -rf /`, `rm -rf /*`, `shutdown`, `reboot`, `mkfs`, `dd if=`, `chmod 777`, `git push --force` to main/master. `sudo` can be included by configuration. Uses regex, not exact string match.
 - **Env filter:** constructs a new `Record<string, string>` containing only allowlisted keys from `process.env`, merged with optional tool-specific env vars. Never passes through `process.env` as-is.
 - **Path filter:** resolves the target path to an absolute path (following symlinks via `fs.realpathSync`), checks denied paths first (denied takes precedence), then checks allowed paths. Tilde (`~`) is expanded to `$HOME`.
 

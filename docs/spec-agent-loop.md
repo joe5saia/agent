@@ -258,7 +258,7 @@ tools:
 - **Output truncation** — tool output is capped to prevent context explosion. For `read`, return
   head-truncated output with continuation guidance (`offset=<n>`). For `bash`, return tail-truncated
   output and include the path to the temp file containing the full output when truncation occurs.
-- **Dangerous command blocklist** — commands like `rm`, `sudo`, `shutdown`, `reboot`, `mkfs`, `dd`, `chmod 777` are blocked for the `bash` tool regardless of category. The blocklist is a defense-in-depth layer, not the primary protection (structured execution is). See [Security](spec-security.md#112-runtime-safeguards) for details.
+- **Dangerous command blocklist** — commands like `rm`, `shutdown`, `reboot`, `mkfs`, `dd`, `chmod 777` are blocked for the `bash` tool. Additional patterns (including `sudo`) can be blocked through `security.blocked_commands`. The blocklist is a defense-in-depth layer, not the primary protection (structured execution is). See [Security](spec-security.md#112-runtime-safeguards) for details.
 - **Timeout** — tool execution has a configurable timeout (default 120s).
 
 **Filesystem access boundaries:**

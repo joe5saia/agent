@@ -25,10 +25,6 @@ export function isBlockedCommand(
 		};
 	}
 
-	if (/^sudo(?:\s|$)/.test(normalized)) {
-		return { blocked: true, reason: "Blocked sudo command." };
-	}
-
 	if (/\b(?:shutdown|reboot|halt)\b/.test(normalized)) {
 		return { blocked: true, reason: "Blocked system power command." };
 	}

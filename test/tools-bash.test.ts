@@ -42,6 +42,27 @@ describe("bash built-in", () => {
 		expect(result.content).toMatch(/blocked/i);
 	});
 
+	it("blocks sudo when configured in blockedCommands", async () => {
+		const root = createTempDirectory();
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, {
+			security: {
+				allowedEnv: ["PATH"],
+				allowedPaths: [root],
+				blockedCommands: [String.raw`^sudo(?:\s|$)`],
+				deniedPaths: [],
+			},
+			tools: {
+				outputLimit: 2000,
+				timeout: 2,
+			},
+		});
+
+		const result = await executeTool(registry, "bash", { command: "sudo -n whoami" });
+		expect(result.isError).toBe(true);
+		expect(result.content).toMatch(/blocked/i);
+	});
+
 	it("S6.6: bash env contains only allowlisted variables", async () => {
 		const root = createTempDirectory();
 		process.env["AGENT_TOOLS_ALLOW"] = "1";

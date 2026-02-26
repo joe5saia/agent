@@ -38,7 +38,7 @@ The container uses:
 
 - Alpine-based image (`node:20-alpine`)
 - Persistent volume at `/home/agent/.agent`
-- Non-root runtime user (`agent`)
+- Non-root runtime user (`agent`) with passwordless `sudo` inside the container
 
 If no config exists yet, the entrypoint creates a starter config at
 `/home/agent/.agent/config.yaml`.
@@ -60,7 +60,7 @@ model:
   name: claude-3-5-haiku-latest
 
 security:
-  blocked_commands: []
+  blocked_commands: [] # Keep sudo unblocked inside container
 
 server:
   host: 0.0.0.0
