@@ -33,6 +33,11 @@ src/
 │   ├── loop.ts                 # Core agent loop (stream → tools → loop)
 │   ├── system-prompt.ts        # System prompt assembly
 │   └── types.ts                # AgentEvent, AgentMessage, etc.
+├── skills/
+│   ├── loader.ts               # SKILL.md discovery + frontmatter parsing
+│   ├── matcher.ts              # Per-turn skill selection heuristics
+│   ├── resource-selector.ts    # On-demand bundled resource selection/snippets
+│   └── types.ts                # SkillDefinition and load warnings
 ├── tools/
 │   ├── registry.ts             # Tool registration and lookup
 │   ├── executor.ts             # Tool execution with safety checks

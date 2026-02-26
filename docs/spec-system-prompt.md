@@ -15,109 +15,173 @@ System prompt assembly, structured logging, observability, and error handling st
 
 ## 13. System Prompt & Agent Identity
 
-The system prompt defines who the agent is, what tools it has, and how it should behave. It is assembled dynamically per session from composable layers.
+The system prompt defines agent behavior and voice. It is assembled per turn from universal Markdown files stored in `~/.agent/`, then enriched with runtime-generated capability context.
 
-### 13.1 Prompt Layers
+### 13.1 Universal Prompt Files
+
+The runtime uses one universal prompt pair for all sessions:
+
+- **System document** — `~/.agent/system.md`
+- **Soul document** — `~/.agent/soul.md`
+
+This model intentionally removes profile-level prompt variants. Every session uses the same baseline instruction set unless a per-session override is explicitly provided.
+
+### 13.2 Prompt Layers
 
 The system prompt is constructed by concatenating these layers in order:
 
 ```
-┌──────────────────────────────────────┐
-│  1. Identity         (who you are)   │
-│  2. Tool Descriptions (what you can) │
-│  3. Workflow Catalog  (structured)   │
-│  4. Session Context   (per-session)  │
-│  5. Custom Instructions (user file)  │
-└──────────────────────────────────────┘
+┌────────────────────────────────────────────────────────┐
+│  1. System Document      (capabilities + hard rules)  │
+│  2. Tool Descriptions    (auto-generated)             │
+│  3. Workflow Catalog     (auto-generated)             │
+│  4. Skills Catalog       (auto-generated)             │
+│  5. Active Skills        (selected skill bodies)      │
+│  6. Active Skill Resources (selected excerpts)        │
+│  7. Soul Document        (interaction style)          │
+│  8. Session Context      (per-session override)       │
+│  9. Custom Instructions  (optional compatibility)     │
+└────────────────────────────────────────────────────────┘
 ```
 
-1. **Identity** — a static block defining the agent's persona, behavioral rules, and output format preferences. Stored in `~/.agent/config.yaml` under `system_prompt.identity` or loaded from `~/.agent/system-prompt.md`.
-2. **Tool Descriptions** — auto-generated from registered tools. Each tool's `name`, `description`, and parameter schema are formatted into the prompt. This layer is managed by the tool system — not hand-written.
-3. **Workflow Catalog** — auto-generated from loaded workflow definitions. Lists available workflows, their descriptions, and parameters so the LLM knows it can trigger them.
-4. **Session Context** — optional per-session instructions. When creating a session, the user or cron job can provide additional instructions that apply only to that session.
-5. **Custom Instructions** — a user-editable markdown file (`~/.agent/instructions.md`) appended last. This allows the user to add persistent instructions without modifying config.
+Layer responsibilities:
 
-### 13.2 Identity Block
+1. **System Document** — non-negotiable operating constraints, capability framing, tool-use policy, and completion criteria.
+2. **Tool Descriptions** — generated from registered tools (`name`, `description`, parameter schema).
+3. **Workflow Catalog** — generated from loaded workflows so the model knows what can be invoked structurally.
+4. **Skills Catalog** — generated from loaded `SKILL.md` frontmatter metadata.
+5. **Active Skills** — instruction bodies for explicitly requested or relevant skills only.
+6. **Active Skill Resources** — on-demand excerpts from bundled resources (`references/`, `scripts/`, linked local files) selected per-turn from active skills.
+7. **Soul Document** — personality and communication style constraints that do not loosen system or safety rules.
+8. **Session Context** — optional session-specific instructions (`systemPromptOverride`).
+9. **Custom Instructions** — optional compatibility layer for existing installs using `custom_instructions_file`.
 
-The identity block is the only part of the system prompt that is hand-written. It defines:
+### 13.3 System vs Soul Contract
+
+`system.md` and `soul.md` are both required by default, but they have different purposes:
+
+| File                 | Required content                                                                     | Forbidden content                                                                |
+| -------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `~/.agent/system.md` | Task execution rules, tool behavior expectations, safety boundaries, output contract | Personality embellishments that weaken clarity of hard constraints               |
+| `~/.agent/soul.md`   | Tone, interpersonal behavior, pacing, concision style, collaboration posture         | Any instruction that overrides safety, policy, tool constraints, or system rules |
+
+### 13.4 Precedence Rules
+
+Prompt precedence is strict:
+
+1. System/safety/tool constraints win over all lower layers.
+2. Runtime capability sections (tools/workflows/skills) win over soul/style instructions when they conflict.
+3. Soul/style instructions apply only when they do not conflict with layers 1-2.
+4. Session overrides may add context but may not disable safety/tool policy constraints.
+
+The runtime inserts a fixed delimiter before the soul layer:
 
 ```markdown
-You are an AI agent running on a dedicated virtual machine.
+## Style Directives (Subordinate to System Rules)
 
-You have access to the tools listed below to accomplish tasks. Use them proactively.
-
-Rules:
-
-- Always explain what you are about to do before executing a tool.
-- If a tool fails, analyze the error and try an alternative approach.
-- Never execute destructive operations without confirming the intent is clear.
-- When you are done, provide a concise summary of what was accomplished.
+If style guidance conflicts with system, safety, or tool constraints above, follow the constraints above.
 ```
 
-The identity block is intentionally minimal. The agent is general-purpose — its personality comes from the tools and workflows available to it, not from a long persona description.
-
-### 13.3 Prompt Assembly
-
-```typescript
-function buildSystemPrompt(
-	session: SessionMetadata,
-	tools: AgentTool[],
-	workflows: WorkflowDefinition[],
-	config: AgentConfig,
-): string {
-	const parts: string[] = [];
-
-	// 1. Identity
-	parts.push(config.systemPrompt.identity);
-
-	// 2. Tools (auto-generated)
-	parts.push("## Available Tools\n");
-	for (const tool of tools) {
-		parts.push(`- **${tool.name}**: ${tool.description}`);
-	}
-
-	// 3. Workflows (auto-generated)
-	if (workflows.length > 0) {
-		parts.push("\n## Available Workflows\n");
-		for (const wf of workflows) {
-			parts.push(`- **${wf.name}**: ${wf.description}`);
-		}
-	}
-
-	// 4. Session context (if provided)
-	if (session.systemPromptOverride) {
-		parts.push(`\n## Session Instructions\n${session.systemPromptOverride}`);
-	}
-
-	// 5. Custom instructions file
-	if (config.systemPrompt.customInstructions) {
-		parts.push(`\n${config.systemPrompt.customInstructions}`);
-	}
-
-	return parts.join("\n");
-}
-```
-
-### 13.4 Configuration
+### 13.5 Configuration
 
 ```yaml
 # ~/.agent/config.yaml (relevant section)
 system_prompt:
-  identity_file: "~/.agent/system-prompt.md" # Path to identity block
-  custom_instructions_file: "~/.agent/instructions.md" # Optional user instructions
+  system_file: "~/.agent/system.md" # Universal system prompt file
+  soul_file: "~/.agent/soul.md" # Universal personality prompt file
+  strict_prompt_files: true # Missing/unreadable prompt files are fatal when true
+  custom_instructions_file: "~/.agent/instructions.md" # Optional compatibility layer
+  identity_file: "~/.agent/system-prompt.md" # Deprecated fallback key
 ```
 
-**Naming convention:** YAML config uses `snake_case` keys. At load time, the config loader maps these to `camelCase` TypeScript properties (e.g., `system_prompt.identity_file` → `config.systemPrompt.identityFile`). The TypeBox schema defines the YAML-side names; the `Static<typeof Schema>` type produces the runtime type.
+Compatibility and precedence:
 
-### 13.5 Test Scenarios
+- If `system_file`/`soul_file` are configured (or defaulted), universal file mode is active.
+- If legacy `identity_file` is configured without universal keys, runtime enters compatibility mode and maps `identity_file` to the system layer.
+- If both new and legacy keys exist, new keys win and a deprecation warning is logged for legacy keys.
 
-- **S13.1**: System prompt includes the identity block from config.
-- **S13.2**: System prompt includes auto-generated tool descriptions for all registered tools.
-- **S13.3**: System prompt includes workflow catalog when workflows are loaded.
-- **S13.4**: Per-session system prompt override is appended when provided.
-- **S13.5**: Custom instructions file is loaded and appended when the file exists.
-- **S13.6**: Custom instructions file missing does not cause an error — the layer is skipped.
-- **S13.7**: Tool descriptions update when tools are added or removed without restarting.
+### 13.6 Prompt Assembly Algorithm
+
+```typescript
+function buildPromptLayers(input: PromptBuildInput): string {
+	const systemText = readRequiredOrFallback({
+		fallback: defaultSystemPrompt,
+		path: input.config.systemPrompt.systemFile,
+		strict: input.config.systemPrompt.strictPromptFiles,
+	});
+	const soulText = readRequiredOrFallback({
+		fallback: defaultSoulPrompt,
+		path: input.config.systemPrompt.soulFile,
+		strict: input.config.systemPrompt.strictPromptFiles,
+	});
+
+	const parts = [
+		systemText,
+		buildToolsSection(input.tools),
+		buildWorkflowsSection(input.workflows),
+		buildSkillsCatalogSection(input.skills),
+		buildActiveSkillsSection(input.activeSkills),
+		buildActiveSkillResourcesSection(input.activeSkillResources),
+		[
+			"## Style Directives (Subordinate to System Rules)",
+			"If style guidance conflicts with system, safety, or tool constraints above, follow the constraints above.",
+			soulText,
+		].join("\n"),
+		buildSessionOverrideSection(input.session.systemPromptOverride),
+		readOptionalFile(input.config.systemPrompt.customInstructionsFile),
+	].filter((part) => part !== undefined && part.trim() !== "");
+
+	return `${parts.join("\n\n")}\n`;
+}
+```
+
+### 13.7 File Reload and Runtime Behavior
+
+- Prompt files are loaded during startup and on runtime config reload.
+- Changes to `~/.agent/system.md` or `~/.agent/soul.md` are picked up by the existing debounced file-watch reload pipeline.
+- Reload semantics:
+  - **Success path:** new prompt fragments become active for the next turn.
+  - **Failure path (`strict_prompt_files=true`):** reload is rejected, last known-good prompt state remains active, and `config_reload_failed` is logged.
+  - **Failure path (`strict_prompt_files=false`):** missing/unreadable files fall back to defaults, and a warning is logged.
+
+### 13.8 Migration Strategy
+
+Migration is additive and non-breaking:
+
+1. Introduce new config keys and defaults (`system_file`, `soul_file`, `strict_prompt_files`).
+2. Keep legacy `identity_file` and `custom_instructions_file` support for one compatibility window.
+3. Emit warning logs on legacy key usage with a documented removal milestone.
+4. Remove legacy keys after the compatibility window and release-note the breaking change.
+
+### 13.9 Test Scenarios
+
+Unit tests (`test/system-prompt.test.ts`):
+
+- **S13.1**: Prompt includes text from `system_file`.
+- **S13.2**: Prompt includes text from `soul_file`.
+- **S13.3**: Prompt includes the style-precedence delimiter before the soul document.
+- **S13.4**: Tool descriptions are included for all registered tools.
+- **S13.5**: Workflow catalog appears when workflows are present.
+- **S13.6**: Skills catalog appears when valid skills are loaded.
+- **S13.7**: Active skill bodies are included only for selected skills.
+- **S13.8**: Active skill resource excerpts are included only for selected resources.
+- **S13.9**: Session override appears after soul/style directives.
+- **S13.10**: Custom instructions append last when configured and present.
+
+Failure and compatibility tests (`test/system-prompt.test.ts`, `test/config.test.ts`):
+
+- **S13.11**: `strict_prompt_files=true` + missing `system_file` fails prompt preparation.
+- **S13.12**: `strict_prompt_files=true` + missing `soul_file` fails prompt preparation.
+- **S13.12**: `strict_prompt_files=false` + missing file uses default fallback and logs warning.
+- **S13.13**: Legacy `identity_file`-only config still builds prompts in compatibility mode.
+- **S13.14**: New keys override `identity_file` when both are configured.
+- **S13.15**: Legacy key usage emits deprecation warning logs.
+
+Runtime reload tests (`test/index.test.ts`, `test/server.test.ts`):
+
+- **S13.16**: Editing `~/.agent/system.md` triggers debounced reload and updates next-turn prompt.
+- **S13.17**: Editing `~/.agent/soul.md` triggers debounced reload and updates next-turn prompt.
+- **S13.18**: Reload failure in strict mode retains last known-good prompt state and logs `config_reload_failed`.
 
 ---
 

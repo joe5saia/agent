@@ -323,7 +323,7 @@ export class WsRuntime {
 				postUserMetadata.name === "New Session" && postUserMetadata.messageCount === 1;
 
 			const contextMessages = await this.#deps.sessionManager.buildContextForRun(sessionId);
-			const systemPrompt = this.#deps.systemPromptBuilder(postUserMetadata);
+			const systemPrompt = this.#deps.systemPromptBuilder(postUserMetadata, userText);
 			const previousLength = contextMessages.length;
 			const runtimeOptions = this.#settings.resolveRuntimeOptions();
 

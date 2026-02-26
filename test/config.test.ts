@@ -62,6 +62,9 @@ security:
 		expect(config.tools.maxIterations).toBe(20);
 		expect(config.logging.level).toBe("info");
 		expect(config.retry.maxRetries).toBe(3);
+		expect(config.systemPrompt.systemFile).toBe("~/.agent/system.md");
+		expect(config.systemPrompt.soulFile).toBe("~/.agent/soul.md");
+		expect(config.systemPrompt.strictPromptFiles).toBe(true);
 	});
 
 	it("S17.3: reports invalid values with a clear field path", () => {
@@ -144,7 +147,9 @@ model:
 security:
   blocked_commands: []
 system_prompt:
-  identity_file: ~/.agent/identity.md
+  system_file: ~/.agent/system-custom.md
+  soul_file: ~/.agent/soul-custom.md
+  strict_prompt_files: false
 logging:
   rotation:
     max_days: 14
@@ -152,8 +157,26 @@ logging:
 
 		const config = loadConfig(path);
 
-		expect(config.systemPrompt.identityFile).toBe("~/.agent/identity.md");
+		expect(config.systemPrompt.systemFile).toBe("~/.agent/system-custom.md");
+		expect(config.systemPrompt.soulFile).toBe("~/.agent/soul-custom.md");
+		expect(config.systemPrompt.strictPromptFiles).toBe(false);
 		expect(config.logging.rotation.maxDays).toBe(14);
+	});
+
+	it("S17.12: keeps legacy identity_file for compatibility", () => {
+		const path = createTempFile(`
+model:
+  provider: openai
+  name: gpt-4o-mini
+security:
+  blocked_commands: []
+system_prompt:
+  identity_file: ~/.agent/system-prompt.md
+`);
+
+		const config = loadConfig(path);
+
+		expect(config.systemPrompt.identityFile).toBe("~/.agent/system-prompt.md");
 	});
 
 	it("S17.8: watches config files and emits reload events", async () => {

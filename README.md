@@ -8,6 +8,7 @@ A minimal, general-purpose AI agent that runs on a dedicated VM within a Tailsca
 - **Scheduled mode** — cron-triggered automated tasks
 - **Tool system** — extensible CLI tool registration with TypeBox schemas
 - **Structured workflows** — repeatable workflows defined in YAML
+- **Skills support** — three-layer progressive disclosure for `SKILL.md` skills from `~/.agent/skills`
 
 ## Prerequisites
 

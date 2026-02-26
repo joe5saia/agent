@@ -5,7 +5,6 @@ import { pathToFileURL } from "node:url";
 import { getModels, getProviders, type Api, type Message, type Model } from "@mariozechner/pi-ai";
 import {
 	agentLoop,
-	buildSystemPrompt,
 	buildSystemPromptFromPrepared,
 	prepareSystemPrompt,
 	type PreparedSystemPrompt,
@@ -17,6 +16,12 @@ import { createLogger } from "./logging/index.js";
 import { RuntimeConfigProvider } from "./runtime/config-provider.js";
 import { startServer, type RunningServer } from "./server/index.js";
 import { assistantText, SessionManager, toSessionAppendInput } from "./sessions/index.js";
+import {
+	loadSkills,
+	selectRelevantSkills,
+	selectSkillResourceSnippets,
+	type SkillDefinition,
+} from "./skills/index.js";
 import { loadCliTools, registerBuiltinTools, ToolRegistry, type AgentTool } from "./tools/index.js";
 import { WorkflowEngine, loadWorkflows } from "./workflows/index.js";
 
@@ -25,6 +30,7 @@ interface Paths {
 	configPath: string;
 	cronDir: string;
 	cronJobsPath: string;
+	skillsDir: string;
 	toolsPath: string;
 	workflowsDir: string;
 }
@@ -56,8 +62,9 @@ function resolvePaths(): Paths {
 	const toolsPath = join(agentDir, "tools.yaml");
 	const cronDir = join(agentDir, "cron");
 	const cronJobsPath = join(cronDir, "jobs.yaml");
+	const skillsDir = join(agentDir, "skills");
 	const workflowsDir = join(agentDir, "workflows");
-	return { agentDir, configPath, cronDir, cronJobsPath, toolsPath, workflowsDir };
+	return { agentDir, configPath, cronDir, cronJobsPath, skillsDir, toolsPath, workflowsDir };
 }
 
 /**
@@ -121,6 +128,22 @@ function buildRuntimeTools(
 	return stagedRegistry.list();
 }
 
+function loadRuntimeSkills(
+	paths: Paths,
+	logger?: {
+		warn(event: string, fields?: Record<string, unknown>): void;
+	},
+): Array<SkillDefinition> {
+	const loadResult = loadSkills([paths.skillsDir]);
+	for (const warning of loadResult.warnings) {
+		logger?.warn("skills_load_warning", {
+			error: warning.message,
+			path: warning.path,
+		});
+	}
+	return loadResult.skills;
+}
+
 /**
  * Runs a single prompt turn from stdin and exits.
  */
@@ -147,7 +170,27 @@ async function runPromptMode(state: RuntimeState, paths: Paths, prompt: string):
 	});
 
 	const contextMessages = await sessionManager.buildContextForRun(session.id);
-	const systemPrompt = buildSystemPrompt(session, registry.list(), [], state.config);
+	const skills = loadRuntimeSkills(paths, logger);
+	const activeSkills = selectRelevantSkills(skills, prompt);
+	const activeSkillResources = selectSkillResourceSnippets(activeSkills, prompt);
+	for (const warning of activeSkillResources.warnings) {
+		logger.warn("skills_resource_warning", {
+			error: warning.message,
+			path: warning.path,
+		});
+	}
+	const preparedPrompt = prepareSystemPrompt(registry.list(), [], skills, state.config);
+	for (const warning of preparedPrompt.warnings) {
+		logger.warn("system_prompt_warning", {
+			code: warning.code,
+			message: warning.message,
+			...(warning.path === undefined ? {} : { path: warning.path }),
+		});
+	}
+	const systemPrompt = buildSystemPromptFromPrepared(session, preparedPrompt, {
+		activeSkillResources: activeSkillResources.snippets,
+		activeSkills,
+	});
 
 	const beforeLength = contextMessages.length;
 	const finalMessages = await agentLoop(contextMessages, registry, systemPrompt, state.model, {
@@ -201,6 +244,7 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 
 	mkdirSync(paths.agentDir, { recursive: true });
 	mkdirSync(paths.cronDir, { recursive: true });
+	mkdirSync(paths.skillsDir, { recursive: true });
 	mkdirSync(paths.workflowsDir, { recursive: true });
 
 	let workflowEngine = new WorkflowEngine({
@@ -222,7 +266,7 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		systemPromptBuilder: () => "You are running a scheduled cron job.",
 		toolRegistry: registry,
 	});
-	let preparedPrompt: PreparedSystemPrompt = prepareSystemPrompt([], [], state.config);
+	let preparedPrompt: PreparedSystemPrompt = prepareSystemPrompt([], [], [], state.config);
 	let runningServer: RunningServer | undefined;
 	let activeCronJobs: Array<CronJobConfig> = [];
 
@@ -232,8 +276,21 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		logger,
 		model: state.model,
 		sessionManager,
-		systemPromptBuilder: (session: Awaited<ReturnType<SessionManager["get"]>>) =>
-			buildSystemPromptFromPrepared(session, preparedPrompt),
+		systemPromptBuilder: (session: Awaited<ReturnType<SessionManager["get"]>>, userText?: string) =>
+			(() => {
+				const activeSkills = selectRelevantSkills(preparedPrompt.skills, userText ?? "");
+				const activeSkillResources = selectSkillResourceSnippets(activeSkills, userText ?? "");
+				for (const warning of activeSkillResources.warnings) {
+					logger.warn("skills_resource_warning", {
+						error: warning.message,
+						path: warning.path,
+					});
+				}
+				return buildSystemPromptFromPrepared(session, preparedPrompt, {
+					activeSkillResources: activeSkillResources.snippets,
+					activeSkills,
+				});
+			})(),
 		toolRegistry: registry,
 		workflowEngine,
 	};
@@ -329,7 +386,20 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 			nextWorkflowEngine.setDefinitions(loadWorkflows(paths.workflowsDir));
 
 			const nextTools = buildRuntimeTools(nextConfig, paths, nextWorkflowEngine);
-			const nextPrompt = prepareSystemPrompt(nextTools, nextWorkflowEngine.list(), nextConfig);
+			const nextSkills = loadRuntimeSkills(paths, logger);
+			const nextPrompt = prepareSystemPrompt(
+				nextTools,
+				nextWorkflowEngine.list(),
+				nextSkills,
+				nextConfig,
+			);
+			for (const warning of nextPrompt.warnings) {
+				logger.warn("system_prompt_warning", {
+					code: warning.code,
+					message: warning.message,
+					...(warning.path === undefined ? {} : { path: warning.path }),
+				});
+			}
 			const nextCronJobs = loadCronJobs(paths.cronJobsPath);
 
 			nextCronService = new CronService({
@@ -393,7 +463,8 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 
 			logger.info("config_reloaded", {
 				reason,
-				sections: ["config", "tools", "cron", "workflows"],
+				sections: ["config", "tools", "cron", "skills", "workflows"],
+				skillCount: nextSkills.length,
 				toolCount: nextTools.length,
 				workflowCount: nextWorkflowEngine.list().length,
 			});

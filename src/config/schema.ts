@@ -71,7 +71,10 @@ export const securityConfigSchema = Type.Object({
  */
 export const systemPromptConfigSchema = Type.Object({
 	customInstructionsFile: Type.Optional(Type.String()),
-	identityFile: Type.String({ default: "~/.agent/system-prompt.md" }),
+	identityFile: Type.Optional(Type.String()),
+	soulFile: Type.String({ default: "~/.agent/soul.md" }),
+	strictPromptFiles: Type.Boolean({ default: true }),
+	systemFile: Type.String({ default: "~/.agent/system.md" }),
 });
 
 /**

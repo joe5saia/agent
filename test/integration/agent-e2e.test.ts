@@ -129,7 +129,9 @@ describeIntegration("integration: agent websocket e2e", () => {
 						port: 0,
 					},
 					systemPrompt: {
-						identityFile: join(sessionsDir, "missing-identity.md"),
+						soulFile: join(sessionsDir, "missing-soul.md"),
+						strictPromptFiles: false,
+						systemFile: join(sessionsDir, "missing-system.md"),
 					},
 					tools: {
 						maxIterations: 4,

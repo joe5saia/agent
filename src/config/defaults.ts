@@ -36,7 +36,9 @@ export const defaultConfig: Omit<AgentConfig, "model"> = {
 		port: 8080,
 	},
 	systemPrompt: {
-		identityFile: "~/.agent/system-prompt.md",
+		soulFile: "~/.agent/soul.md",
+		strictPromptFiles: true,
+		systemFile: "~/.agent/system.md",
 	},
 	tools: {
 		maxIterations: 20,

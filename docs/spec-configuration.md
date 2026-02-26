@@ -72,7 +72,10 @@ const SecurityConfigSchema = Type.Object({
 });
 
 const SystemPromptConfigSchema = Type.Object({
-	identity_file: Type.String({ default: "~/.agent/system-prompt.md" }),
+	system_file: Type.String({ default: "~/.agent/system.md" }),
+	soul_file: Type.String({ default: "~/.agent/soul.md" }),
+	strict_prompt_files: Type.Boolean({ default: true }),
+	identity_file: Type.Optional(Type.String()), // Deprecated compatibility key
 	custom_instructions_file: Type.Optional(Type.String()),
 });
 
@@ -124,20 +127,42 @@ function loadConfig(path: string): AgentConfig {
 
 When no `config.yaml` exists, the agent starts with sensible defaults:
 
-| Setting              | Default                 |
-| -------------------- | ----------------------- |
-| `model.provider`     | (required — no default) |
-| `model.name`         | (required — no default) |
-| `server.host`        | `127.0.0.1`             |
-| `server.port`        | `8080`                  |
-| `tools.output_limit` | `200000` (bytes)        |
-| `tools.timeout`      | `120` (seconds)         |
-| `logging.level`      | `info`                  |
-| `retry.max_retries`  | `3`                     |
+| Setting                             | Default                 |
+| ----------------------------------- | ----------------------- |
+| `model.provider`                    | (required — no default) |
+| `model.name`                        | (required — no default) |
+| `server.host`                       | `127.0.0.1`             |
+| `server.port`                       | `8080`                  |
+| `tools.output_limit`                | `200000` (bytes)        |
+| `tools.timeout`                     | `120` (seconds)         |
+| `logging.level`                     | `info`                  |
+| `retry.max_retries`                 | `3`                     |
+| `system_prompt.system_file`         | `~/.agent/system.md`    |
+| `system_prompt.soul_file`           | `~/.agent/soul.md`      |
+| `system_prompt.strict_prompt_files` | `true`                  |
 
 Model provider and name are required — the agent cannot start without knowing which LLM to use.
 
-### 17.4 Test Scenarios
+### 17.4 System Prompt Key Semantics
+
+The `system_prompt` section supports both new and legacy keys during a migration window:
+
+| Key                        | Status     | Meaning                                                          |
+| -------------------------- | ---------- | ---------------------------------------------------------------- |
+| `system_file`              | Active     | Universal system prompt file path                                |
+| `soul_file`                | Active     | Universal soul prompt file path                                  |
+| `strict_prompt_files`      | Active     | Controls fatal vs fallback behavior for missing/unreadable files |
+| `custom_instructions_file` | Active     | Optional final append layer                                      |
+| `identity_file`            | Deprecated | Legacy system prompt file key; supported only for compatibility  |
+
+Resolution rules:
+
+1. If `system_file` and `soul_file` are available (explicit or default), the runtime uses universal file mode.
+2. If only `identity_file` is set and universal keys are not configured, runtime enters compatibility mode.
+3. If both universal keys and `identity_file` are set, universal keys take precedence.
+4. Legacy key usage emits warning logs with a removal milestone.
+
+### 17.5 Test Scenarios
 
 - **S17.1**: Valid config file loads and returns a typed `AgentConfig` object.
 - **S17.2**: Missing optional fields are filled with defaults.
@@ -147,6 +172,11 @@ Model provider and name are required — the agent cannot start without knowing 
 - **S17.6**: Config with invalid YAML syntax produces a parse error with line number.
 - **S17.7**: Default config is used when no config file exists, except for required fields.
 - **S17.8**: Config reload validates the new config before applying it.
+- **S17.9**: Defaulted `system_prompt.system_file` resolves to `~/.agent/system.md`.
+- **S17.10**: Defaulted `system_prompt.soul_file` resolves to `~/.agent/soul.md`.
+- **S17.11**: Defaulted `system_prompt.strict_prompt_files` is `true`.
+- **S17.12**: Config with only `identity_file` remains valid for compatibility mode.
+- **S17.13**: Config with both new and legacy keys remains valid and prefers new keys.
 
 ---
 

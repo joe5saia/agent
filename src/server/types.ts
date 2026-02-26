@@ -22,7 +22,7 @@ export interface ServerDependencies {
 		onEvent?: (event: AgentEvent) => void,
 	) => Promise<Array<Message>>;
 	sessionManager: SessionManager;
-	systemPromptBuilder: (session: SessionMetadata) => string;
+	systemPromptBuilder: (session: SessionMetadata, userText?: string) => string;
 	toolRegistry: ToolRegistry;
 	workflowEngine?: WorkflowEngine;
 }

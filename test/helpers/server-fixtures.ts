@@ -56,7 +56,9 @@ export function createConfig(overrides?: Partial<AgentConfig>): AgentConfig {
 			port: 0,
 		},
 		systemPrompt: {
-			identityFile: "~/.agent/system-prompt.md",
+			soulFile: "~/.agent/soul.md",
+			strictPromptFiles: false,
+			systemFile: "~/.agent/system.md",
 		},
 		tools: {
 			maxIterations: 3,
