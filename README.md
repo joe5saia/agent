@@ -49,7 +49,7 @@ open http://127.0.0.1:8080/ui/
 
 The container persists runtime state in a named volume at `/home/agent/.agent`.
 Set API credentials in `deploy/docker/.env` (copy from `deploy/docker/.env.example`).
-The runtime user is `agent`, with passwordless `sudo` available inside the container.
+The image configures passwordless `sudo` for both `agent` and `node` users inside the container.
 
 ## Development
 

@@ -38,7 +38,7 @@ The container uses:
 
 - Alpine-based image (`node:20-alpine`)
 - Persistent volume at `/home/agent/.agent`
-- Non-root runtime user (`agent`) with passwordless `sudo` inside the container
+- Non-root runtime users (`agent` and `node`) with passwordless `sudo` inside the container
 
 If no config exists yet, the entrypoint creates a starter config at
 `/home/agent/.agent/config.yaml`.

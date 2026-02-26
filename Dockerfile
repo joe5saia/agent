@@ -16,7 +16,7 @@ RUN apk add --no-cache bash sudo tini \
 	&& addgroup -S agent \
 	&& adduser -S -G agent -h /home/agent agent \
 	&& install -d -m 0755 /etc/sudoers.d \
-	&& printf "agent ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers.d/agent \
+	&& printf "agent ALL=(ALL) NOPASSWD: ALL\nnode ALL=(ALL) NOPASSWD: ALL\n" > /etc/sudoers.d/agent \
 	&& chmod 0440 /etc/sudoers.d/agent \
 	&& mkdir -p /home/agent/.agent \
 	&& chown -R agent:agent /home/agent /app
