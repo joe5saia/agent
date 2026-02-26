@@ -4,6 +4,8 @@ import { Type } from "@sinclair/typebox";
 import { validatePath } from "../../security/index.js";
 import type { AgentTool } from "../types.js";
 
+const protectedCronJobsPath = "~/.agent/cron/jobs.yaml";
+
 /**
  * Configuration for the edit built-in tool.
  */
@@ -136,7 +138,11 @@ export function createEditTool(options: EditToolOptions): AgentTool {
 				);
 			}
 
-			const result = validatePath(path, options.allowedPaths, options.deniedPaths);
+			const result = validatePath(path, options.allowedPaths, options.deniedPaths, {
+				protectedPaths: [protectedCronJobsPath],
+				protectedReason:
+					"Path is protected. Use the dedicated 'cron' tool to manage cron jobs safely.",
+			});
 			if (!result.allowed) {
 				throw new Error(result.reason ?? "Path denied by policy.");
 			}

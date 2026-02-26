@@ -127,4 +127,20 @@ describe("validatePath", () => {
 		expect(result.allowed).toBe(true);
 		expect(result.resolvedPath).toContain("nested");
 	});
+
+	it("rejects protected paths even when they are inside allowed paths", () => {
+		const root = createTempDirectory("agent-security-");
+		const cronDirectory = join(root, "cron");
+		mkdirSync(cronDirectory, { recursive: true });
+		const cronFile = join(cronDirectory, "jobs.yaml");
+		writeFileSync(cronFile, "jobs: []\n", "utf8");
+
+		const result = validatePath(cronFile, [root], [], {
+			protectedPaths: [cronFile],
+			protectedReason: "protected target",
+		});
+
+		expect(result.allowed).toBe(false);
+		expect(result.reason).toMatch(/protected target/i);
+	});
 });

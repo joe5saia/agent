@@ -47,6 +47,12 @@ Cron jobs run unattended — no user is present to approve actions. Each job spe
 - `max_iterations` — per-job override of the agent loop's `maxIterations` (default: 10, lower than interactive default of 20).
 - `admin`-category tools are **never** available in cron, even if listed in `allowed_tools`.
 
+**Validation safeguards:**
+
+- Job IDs must be unique within `jobs.yaml`.
+- Each `schedule` (and optional `timezone`) is validated before activation.
+- Invalid cron config is rejected on load/reload, and the last known-good runtime remains active.
+
 ### 8.2 Run History
 
 Each job tracks its recent execution history for the web UI:
@@ -119,6 +125,8 @@ function startCronService(jobs: CronJobConfig[]): void {
 - **S8.11**: `admin`-category tools are blocked in cron even if listed in `allowed_tools`.
 - **S8.12**: `consecutiveFailures` increments on failure and resets on success.
 - **S8.13**: `GET /api/cron` returns job status including `lastRunAt`, `lastStatus`, and `consecutiveFailures`.
+- **S8.14**: Duplicate cron job IDs are rejected during config load.
+- **S8.15**: Invalid cron `schedule`/`timezone` is rejected before scheduling.
 
 ---
 

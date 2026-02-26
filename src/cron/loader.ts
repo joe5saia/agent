@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { Cron } from "croner";
 import { parse as parseYaml } from "yaml";
 import type { CronJobConfig } from "./types.js";
 
@@ -8,6 +9,27 @@ interface CronJobsDocument {
 
 function isObject(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function validateSchedule(
+	schedule: string,
+	timezone: string | undefined,
+	path: string,
+	index: number,
+): void {
+	try {
+		const probe = new Cron(schedule, {
+			maxRuns: 1,
+			paused: true,
+			...(timezone === undefined ? {} : { timezone }),
+		});
+		probe.stop();
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		throw new Error(
+			`Invalid cron job at ${path}[${String(index)}]: schedule/timezone is invalid (${message})`,
+		);
+	}
 }
 
 function parseJob(input: unknown, path: string, index: number): CronJobConfig {
@@ -26,6 +48,8 @@ function parseJob(input: unknown, path: string, index: number): CronJobConfig {
 	if (typeof input["enabled"] !== "boolean") {
 		throw new Error(`Invalid cron job at ${path}[${String(index)}]: enabled must be boolean`);
 	}
+	const timezone = typeof input["timezone"] === "string" ? input["timezone"] : undefined;
+	validateSchedule(input["schedule"], timezone, path, index);
 
 	const rawPolicy = input["policy"];
 	const policy =
@@ -62,8 +86,36 @@ function parseJob(input: unknown, path: string, index: number): CronJobConfig {
 		id: input["id"],
 		prompt: input["prompt"],
 		schedule: input["schedule"],
-		...(typeof input["timezone"] === "string" ? { timezone: input["timezone"] } : {}),
+		...(timezone === undefined ? {} : { timezone }),
 	};
+}
+
+/**
+ * Parses and validates a cron jobs document object.
+ */
+export function parseCronJobsDocument(document: unknown, path: string): Array<CronJobConfig> {
+	if (!isObject(document) || !Array.isArray(document["jobs"])) {
+		throw new Error(`Invalid cron jobs file ${path}: root must contain a jobs array`);
+	}
+
+	const parsedJobs = (document["jobs"] as Array<unknown>).map((job, index) =>
+		parseJob(job, path, index),
+	);
+	const seenIds = new Set<string>();
+	for (const job of parsedJobs) {
+		if (seenIds.has(job.id)) {
+			throw new Error(`Invalid cron jobs file ${path}: duplicate job id '${job.id}'`);
+		}
+		seenIds.add(job.id);
+	}
+	return parsedJobs;
+}
+
+/**
+ * Parses and validates cron jobs from YAML text.
+ */
+export function parseCronJobsYaml(raw: string, path: string): Array<CronJobConfig> {
+	return parseCronJobsDocument(parseYaml(raw) as unknown, path);
 }
 
 /**
@@ -80,13 +132,8 @@ export function loadCronJobs(path: string): Array<CronJobConfig> {
 		throw error;
 	}
 
-	const parsed = parseYaml(raw) as unknown;
-	if (!isObject(parsed) || !Array.isArray(parsed["jobs"])) {
-		throw new Error(`Invalid cron jobs file ${path}: root must contain a jobs array`);
-	}
-
 	const document: CronJobsDocument = {
-		jobs: parsed["jobs"].map((job, index) => parseJob(job, path, index)),
+		jobs: parseCronJobsYaml(raw, path),
 	};
 	return document.jobs;
 }

@@ -1,4 +1,5 @@
 import { createBashTool } from "./builtin/bash.js";
+import { createCronTool } from "./builtin/cron.js";
 import { createEditTool } from "./builtin/edit.js";
 import { createFindTool } from "./builtin/find.js";
 import { createGrepTool } from "./builtin/grep.js";
@@ -60,6 +61,10 @@ export function registerBuiltinTools(registry: ToolRegistry, config: BuiltinTool
 		createGrepTool(sharedFsConfig),
 		createFindTool(sharedFsConfig),
 		createLsTool(sharedFsConfig),
+		createCronTool({
+			outputLimitBytes: config.tools.outputLimit,
+			timeoutSeconds: config.tools.timeout,
+		}),
 		// Compatibility aliases during migration window.
 		createReadFileTool(sharedFsConfig),
 		createWriteFileTool(sharedFsConfig),

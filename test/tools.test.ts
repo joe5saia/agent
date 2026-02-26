@@ -130,6 +130,13 @@ describe("built-in tool registration", () => {
 		}
 	});
 
+	it("registers the dedicated cron management tool", () => {
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, builtinConfig);
+		const names = registry.list().map((tool) => tool.name);
+		expect(names).toContain("cron");
+	});
+
 	it("registers legacy aliases and emits deprecation warnings on use", async () => {
 		const warnSpy = vi.spyOn(process, "emitWarning").mockImplementation(() => undefined);
 		const registry = new ToolRegistry();

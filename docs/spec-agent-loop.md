@@ -150,6 +150,7 @@ The agent ships with Pi-style built-in tools.
 
 - Default interactive tool set: `read`, `bash`, `edit`, `write`.
 - Additional built-ins for exploration and read-only flows: `grep`, `find`, `ls`.
+- Dedicated automation tool: `cron` for validated cron job management.
 - Migration support: legacy names `read_file`, `write_file`, and `list_directory` remain as
   aliases for one compatibility window, then are removed.
 
@@ -162,6 +163,7 @@ The agent ships with Pi-style built-in tools.
 | `grep`  | `read`   | Search file contents under allowed paths with regex/literal pattern support.                                            |
 | `find`  | `read`   | Discover files and directories under allowed paths (optionally filtered by glob/pattern).                               |
 | `ls`    | `read`   | List directory entries under allowed paths with stable, deterministic ordering.                                         |
+| `cron`  | `admin`  | Manage `~/.agent/cron/jobs.yaml` using structured actions (`list/get/upsert/delete/enable/disable`) with validation.    |
 
 ### 6.3 CLI Tool Registration
 
@@ -280,6 +282,7 @@ security:
 
 - Paths are resolved to absolute paths and checked against allowed/denied lists.
 - Denied paths take precedence over allowed paths.
+- `~/.agent/cron/jobs.yaml` is protected from generic `write`/`edit`; use the `cron` tool.
 - Symlinks are resolved before checking (prevents symlink escapes).
 - Default allowed root: `~/.agent/workspace/**` and `/tmp/agent/**`.
 - Cron sessions have the same filesystem restrictions; no elevation.
@@ -308,3 +311,5 @@ security:
 - **S6.20**: `bash` output exceeding limit is tail-truncated and includes a full-output temp file path.
 - **S6.21**: `edit` rejects non-unique matches and prompts for more context.
 - **S6.22**: `edit` success result includes a unified diff summary.
+- **S6.23**: `cron` tool rejects invalid schedules and does not persist broken cron config.
+- **S6.24**: `write`/`edit` reject `~/.agent/cron/jobs.yaml`; cron changes must go through `cron`.

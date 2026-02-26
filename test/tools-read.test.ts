@@ -170,4 +170,27 @@ describe("read/write built-ins", () => {
 		expect(readResult).toEqual({ content: "hello tilde", isError: false });
 		expect(readFileSync(join(root, "hello.txt"), "utf8")).toBe("hello tilde");
 	});
+
+	it("blocks direct writes to cron jobs file and requires the cron tool", async () => {
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, {
+			security: {
+				allowedEnv: ["PATH"],
+				allowedPaths: ["~/.agent"],
+				blockedCommands: [],
+				deniedPaths: [],
+			},
+			tools: {
+				outputLimit: 1000,
+				timeout: 2,
+			},
+		});
+
+		const result = await executeTool(registry, "write", {
+			content: "jobs: []",
+			path: "~/.agent/cron/jobs.yaml",
+		});
+		expect(result.isError).toBe(true);
+		expect(result.content).toMatch(/protected|cron tool/i);
+	});
 });

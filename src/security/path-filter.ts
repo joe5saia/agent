@@ -12,6 +12,14 @@ export interface PathValidationResult {
 }
 
 /**
+ * Optional validation constraints beyond allowed/denied paths.
+ */
+export interface PathValidationOptions {
+	protectedPaths?: Array<string>;
+	protectedReason?: string;
+}
+
+/**
  * Expands a leading tilde path segment.
  */
 function expandHomePath(path: string): string {
@@ -71,16 +79,31 @@ export function validatePath(
 	target: string,
 	allowedPaths: Array<string>,
 	deniedPaths: Array<string>,
+	options: PathValidationOptions = {},
 ): PathValidationResult {
 	const resolvedTarget = resolveTargetPath(target);
 	const resolvedDeniedPaths = deniedPaths.map((path) => resolvePolicyPath(path));
 	const resolvedAllowedPaths = allowedPaths.map((path) => resolvePolicyPath(path));
+	const resolvedProtectedPaths = (options.protectedPaths ?? []).map((path) =>
+		resolvePolicyPath(path),
+	);
 
 	for (const deniedPath of resolvedDeniedPaths) {
 		if (isWithinBoundary(resolvedTarget, deniedPath)) {
 			return {
 				allowed: false,
 				reason: `Path is denied by security policy: ${target}`,
+				resolvedPath: resolvedTarget,
+			};
+		}
+	}
+	for (const protectedPath of resolvedProtectedPaths) {
+		if (isWithinBoundary(resolvedTarget, protectedPath)) {
+			return {
+				allowed: false,
+				reason:
+					options.protectedReason ??
+					`Path is protected and can only be managed by dedicated tools: ${target}`,
 				resolvedPath: resolvedTarget,
 			};
 		}

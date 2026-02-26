@@ -114,4 +114,29 @@ describe("edit built-in", () => {
 		expect(result.content).toContain("fuzzy replacement");
 		expect(readFileSync(target, "utf8")).toContain("const value = 2;");
 	});
+
+	it("blocks direct edits to cron jobs file and requires the cron tool", async () => {
+		const registry = new ToolRegistry();
+		registerBuiltinTools(registry, {
+			security: {
+				allowedEnv: ["PATH"],
+				allowedPaths: ["~/.agent"],
+				blockedCommands: [],
+				deniedPaths: [],
+			},
+			tools: {
+				outputLimit: 10_000,
+				timeout: 2,
+			},
+		});
+
+		const result = await executeTool(registry, "edit", {
+			newText: "replacement",
+			oldText: "original",
+			path: "~/.agent/cron/jobs.yaml",
+		});
+
+		expect(result.isError).toBe(true);
+		expect(result.content).toMatch(/protected|cron tool/i);
+	});
 });

@@ -5,6 +5,8 @@ import { validatePath } from "../../security/index.js";
 import type { AgentTool } from "../types.js";
 import { warnLegacyAliasUsage } from "./deprecation.js";
 
+const protectedCronJobsPath = "~/.agent/cron/jobs.yaml";
+
 /**
  * Configuration for write-like built-in tools.
  */
@@ -32,7 +34,11 @@ export function createWriteTool(options: WriteToolOptions): AgentTool {
 
 			const content = typeof args["content"] === "string" ? args["content"] : "";
 			const path = typeof args["path"] === "string" ? args["path"] : "";
-			const result = validatePath(path, options.allowedPaths, options.deniedPaths);
+			const result = validatePath(path, options.allowedPaths, options.deniedPaths, {
+				protectedPaths: [protectedCronJobsPath],
+				protectedReason:
+					"Path is protected. Use the dedicated 'cron' tool to manage cron jobs safely.",
+			});
 			if (!result.allowed) {
 				throw new Error(result.reason ?? "Path denied by policy.");
 			}
