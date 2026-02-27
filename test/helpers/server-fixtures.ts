@@ -23,6 +23,48 @@ export function createTempSessionsDir(): string {
 
 export function createConfig(overrides?: Partial<AgentConfig>): AgentConfig {
 	const base: AgentConfig = {
+		channels: {
+			telegram: {
+				allowFrom: [],
+				delivery: {
+					linkPreview: true,
+					mediaMaxMb: 5,
+					parseMode: "html",
+					retry: {
+						attempts: 3,
+						jitter: 0.2,
+						maxDelayMs: 5000,
+						minDelayMs: 500,
+					},
+					textChunkLimit: 4000,
+				},
+				dmPolicy: "pairing",
+				enabled: false,
+				groupAllowFrom: [],
+				groupPolicy: "allowlist",
+				groups: {},
+				inbound: {
+					allowedUpdates: ["message", "edited_message", "callback_query"],
+					dedupeTtlSeconds: 900,
+					ignoreBotMessages: true,
+				},
+				mode: "polling",
+				polling: {
+					timeoutSeconds: 30,
+				},
+				queue: {
+					maxPendingUpdatesGlobal: 5000,
+					maxPendingUpdatesPerConversation: 32,
+				},
+				streaming: {
+					mode: "off",
+					statusDebounceMs: 1000,
+				},
+				webhookHost: "127.0.0.1",
+				webhookPath: "/agent_telegram_webhook",
+				webhookPort: 8787,
+			},
+		},
 		compaction: {
 			enabled: true,
 			keepRecentTokens: 20_000,
@@ -53,6 +95,10 @@ export function createConfig(overrides?: Partial<AgentConfig>): AgentConfig {
 		},
 		server: {
 			host: "127.0.0.1",
+			interactive: {
+				uiEnabled: false,
+				wsEnabled: false,
+			},
 			port: 0,
 		},
 		systemPrompt: {
@@ -66,7 +112,50 @@ export function createConfig(overrides?: Partial<AgentConfig>): AgentConfig {
 			timeout: 2,
 		},
 	};
-	return { ...base, ...overrides };
+	return {
+		...base,
+		...overrides,
+		channels: {
+			...base.channels,
+			...(overrides?.channels ?? {}),
+			telegram: {
+				...base.channels.telegram,
+				...(overrides?.channels?.telegram ?? {}),
+				delivery: {
+					...base.channels.telegram.delivery,
+					...(overrides?.channels?.telegram?.delivery ?? {}),
+					retry: {
+						...base.channels.telegram.delivery.retry,
+						...(overrides?.channels?.telegram?.delivery?.retry ?? {}),
+					},
+				},
+				inbound: {
+					...base.channels.telegram.inbound,
+					...(overrides?.channels?.telegram?.inbound ?? {}),
+				},
+				polling: {
+					...base.channels.telegram.polling,
+					...(overrides?.channels?.telegram?.polling ?? {}),
+				},
+				queue: {
+					...base.channels.telegram.queue,
+					...(overrides?.channels?.telegram?.queue ?? {}),
+				},
+				streaming: {
+					...base.channels.telegram.streaming,
+					...(overrides?.channels?.telegram?.streaming ?? {}),
+				},
+			},
+		},
+		server: {
+			...base.server,
+			...(overrides?.server ?? {}),
+			interactive: {
+				...base.server.interactive,
+				...(overrides?.server?.interactive ?? {}),
+			},
+		},
+	};
 }
 
 export function createModel(): Model<Api> {

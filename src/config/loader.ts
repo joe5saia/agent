@@ -109,6 +109,65 @@ export function loadConfig(path: string): AgentConfig {
 	const mergedWithTopLevelDefaults: JsonObject = {
 		...defaultConfig,
 		...normalized,
+		channels: {
+			...defaultConfig.channels,
+			...(isJsonObject(normalized.channels) ? normalized.channels : {}),
+			telegram: {
+				...defaultConfig.channels.telegram,
+				...(isJsonObject(normalized.channels) && isJsonObject(normalized.channels.telegram)
+					? normalized.channels.telegram
+					: {}),
+				delivery: {
+					...defaultConfig.channels.telegram.delivery,
+					...(isJsonObject(normalized.channels) &&
+					isJsonObject(normalized.channels.telegram) &&
+					isJsonObject(normalized.channels.telegram.delivery)
+						? normalized.channels.telegram.delivery
+						: {}),
+					retry: {
+						...defaultConfig.channels.telegram.delivery.retry,
+						...(isJsonObject(normalized.channels) &&
+						isJsonObject(normalized.channels.telegram) &&
+						isJsonObject(normalized.channels.telegram.delivery) &&
+						isJsonObject(normalized.channels.telegram.delivery.retry)
+							? normalized.channels.telegram.delivery.retry
+							: {}),
+					},
+				},
+				inbound: {
+					...defaultConfig.channels.telegram.inbound,
+					...(isJsonObject(normalized.channels) &&
+					isJsonObject(normalized.channels.telegram) &&
+					isJsonObject(normalized.channels.telegram.inbound)
+						? normalized.channels.telegram.inbound
+						: {}),
+				},
+				polling: {
+					...defaultConfig.channels.telegram.polling,
+					...(isJsonObject(normalized.channels) &&
+					isJsonObject(normalized.channels.telegram) &&
+					isJsonObject(normalized.channels.telegram.polling)
+						? normalized.channels.telegram.polling
+						: {}),
+				},
+				queue: {
+					...defaultConfig.channels.telegram.queue,
+					...(isJsonObject(normalized.channels) &&
+					isJsonObject(normalized.channels.telegram) &&
+					isJsonObject(normalized.channels.telegram.queue)
+						? normalized.channels.telegram.queue
+						: {}),
+				},
+				streaming: {
+					...defaultConfig.channels.telegram.streaming,
+					...(isJsonObject(normalized.channels) &&
+					isJsonObject(normalized.channels.telegram) &&
+					isJsonObject(normalized.channels.telegram.streaming)
+						? normalized.channels.telegram.streaming
+						: {}),
+				},
+			},
+		},
 		compaction: {
 			...defaultConfig.compaction,
 			...(isJsonObject(normalized.compaction) ? normalized.compaction : {}),
@@ -134,6 +193,12 @@ export function loadConfig(path: string): AgentConfig {
 		server: {
 			...defaultConfig.server,
 			...(isJsonObject(normalized.server) ? normalized.server : {}),
+			interactive: {
+				...defaultConfig.server.interactive,
+				...(isJsonObject(normalized.server) && isJsonObject(normalized.server.interactive)
+					? normalized.server.interactive
+					: {}),
+			},
 		},
 		systemPrompt: {
 			...defaultConfig.systemPrompt,

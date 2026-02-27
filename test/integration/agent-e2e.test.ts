@@ -126,6 +126,10 @@ describeIntegration("integration: agent websocket e2e", () => {
 					},
 					server: {
 						host: "127.0.0.1",
+						interactive: {
+							uiEnabled: true,
+							wsEnabled: true,
+						},
 						port: 0,
 					},
 					systemPrompt: {

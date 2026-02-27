@@ -54,7 +54,13 @@ describe("ws runtime", () => {
 		const created = await deps.sessionManager.create();
 
 		const server = await startServer(
-			createConfig({ server: { host: "127.0.0.1", port: 0 } }),
+			createConfig({
+				server: {
+					host: "127.0.0.1",
+					interactive: { wsEnabled: true },
+					port: 0,
+				},
+			}),
 			deps,
 		);
 		const address = server.httpServer.address();
@@ -102,7 +108,13 @@ describe("ws runtime", () => {
 		};
 
 		const server = await startServer(
-			createConfig({ server: { host: "127.0.0.1", port: 0 } }),
+			createConfig({
+				server: {
+					host: "127.0.0.1",
+					interactive: { wsEnabled: true },
+					port: 0,
+				},
+			}),
 			deps,
 		);
 		const address = server.httpServer.address();
@@ -136,7 +148,13 @@ describe("ws runtime", () => {
 		};
 
 		const server = await startServer(
-			createConfig({ server: { host: "127.0.0.1", port: 0 } }),
+			createConfig({
+				server: {
+					host: "127.0.0.1",
+					interactive: { wsEnabled: true },
+					port: 0,
+				},
+			}),
 			deps,
 			{ maxWsQueueDepth: 1 },
 		);

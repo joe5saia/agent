@@ -133,6 +133,8 @@ When no `config.yaml` exists, the agent starts with sensible defaults:
 | `model.name`                        | (required — no default) |
 | `server.host`                       | `127.0.0.1`             |
 | `server.port`                       | `8080`                  |
+| `server.interactive.ui_enabled`     | `false`                 |
+| `server.interactive.ws_enabled`     | `false`                 |
 | `tools.output_limit`                | `200000` (bytes)        |
 | `tools.timeout`                     | `120` (seconds)         |
 | `logging.level`                     | `info`                  |

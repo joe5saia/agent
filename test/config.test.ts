@@ -57,6 +57,8 @@ security:
 
 		expect(config.server.host).toBe("127.0.0.1");
 		expect(config.server.port).toBe(8080);
+		expect(config.server.interactive.uiEnabled).toBe(false);
+		expect(config.server.interactive.wsEnabled).toBe(false);
 		expect(config.tools.outputLimit).toBe(200_000);
 		expect(config.tools.timeout).toBe(120);
 		expect(config.tools.maxIterations).toBe(20);
@@ -65,6 +67,10 @@ security:
 		expect(config.systemPrompt.systemFile).toBe("~/.agent/system.md");
 		expect(config.systemPrompt.soulFile).toBe("~/.agent/soul.md");
 		expect(config.systemPrompt.strictPromptFiles).toBe(true);
+		expect(config.channels.telegram.enabled).toBe(false);
+		expect(config.channels.telegram.mode).toBe("polling");
+		expect(config.channels.telegram.queue.maxPendingUpdatesPerConversation).toBe(32);
+		expect(config.channels.telegram.delivery.textChunkLimit).toBe(4000);
 	});
 
 	it("S17.3: reports invalid values with a clear field path", () => {
@@ -153,6 +159,10 @@ system_prompt:
 logging:
   rotation:
     max_days: 14
+server:
+  interactive:
+    ui_enabled: true
+    ws_enabled: true
 `);
 
 		const config = loadConfig(path);
@@ -161,6 +171,37 @@ logging:
 		expect(config.systemPrompt.soulFile).toBe("~/.agent/soul-custom.md");
 		expect(config.systemPrompt.strictPromptFiles).toBe(false);
 		expect(config.logging.rotation.maxDays).toBe(14);
+		expect(config.server.interactive.uiEnabled).toBe(true);
+		expect(config.server.interactive.wsEnabled).toBe(true);
+	});
+
+	it("maps snake_case channel keys to camelCase properties", () => {
+		const path = createTempFile(`
+model:
+  provider: openai
+  name: gpt-4o-mini
+security:
+  blocked_commands: []
+channels:
+  telegram:
+    enabled: true
+    bot_token: token
+    group_policy: open
+    allow_from:
+      - "123"
+    streaming:
+      status_debounce_ms: 50
+    queue:
+      max_pending_updates_per_conversation: 10
+`);
+
+		const config = loadConfig(path);
+		expect(config.channels.telegram.enabled).toBe(true);
+		expect(config.channels.telegram.botToken).toBe("token");
+		expect(config.channels.telegram.groupPolicy).toBe("open");
+		expect(config.channels.telegram.allowFrom).toEqual(["123"]);
+		expect(config.channels.telegram.streaming.statusDebounceMs).toBe(50);
+		expect(config.channels.telegram.queue.maxPendingUpdatesPerConversation).toBe(10);
 	});
 
 	it("S17.12: keeps legacy identity_file for compatibility", () => {

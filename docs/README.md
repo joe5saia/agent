@@ -15,6 +15,7 @@ Project documentation for all contributors and agents. Files in this directory s
 | [onboarding-setup.md](onboarding-setup.md)             | New-user setup for Claude/Codex tokens and Docker Compose on VM/laptop               |
 | [spec-agent-loop.md](spec-agent-loop.md)               | Agent loop core and tool system (§5–§6)                                              |
 | [spec-automation.md](spec-automation.md)               | Cron scheduled triggers and structured workflows (§8–§9)                             |
+| [spec-chat-channels.md](spec-chat-channels.md)         | Channel abstraction and Telegram-first interface specification (§23–§26)             |
 | [spec-configuration.md](spec-configuration.md)         | Configuration validation and session naming UX (§17–§18)                             |
 | [spec-overview.md](spec-overview.md)                   | Goals, methodology, and architecture overview (§1–§3)                                |
 | [spec-project-structure.md](spec-project-structure.md) | Source layout, milestones, deployment, inspirations (§19–§22)                        |

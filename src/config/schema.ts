@@ -13,6 +13,10 @@ export const modelConfigSchema = Type.Object({
  */
 export const serverConfigSchema = Type.Object({
 	host: Type.String({ default: "127.0.0.1" }),
+	interactive: Type.Object({
+		uiEnabled: Type.Boolean({ default: false }),
+		wsEnabled: Type.Boolean({ default: false }),
+	}),
 	port: Type.Number({ default: 8080, maximum: 65_535, minimum: 1 }),
 });
 
@@ -87,9 +91,131 @@ export const compactionConfigSchema = Type.Object({
 });
 
 /**
+ * Channel queue settings.
+ */
+export const channelQueueConfigSchema = Type.Object({
+	maxPendingUpdatesGlobal: Type.Number({ default: 5000, minimum: 1 }),
+	maxPendingUpdatesPerConversation: Type.Number({ default: 32, minimum: 1 }),
+});
+
+/**
+ * Telegram inbound handling config.
+ */
+export const telegramInboundConfigSchema = Type.Object({
+	allowedUpdates: Type.Array(Type.String(), {
+		default: ["message", "edited_message", "callback_query"],
+	}),
+	dedupeTtlSeconds: Type.Number({ default: 900, minimum: 60 }),
+	ignoreBotMessages: Type.Boolean({ default: true }),
+});
+
+/**
+ * Telegram transport mode config.
+ */
+export const telegramPollingConfigSchema = Type.Object({
+	timeoutSeconds: Type.Number({ default: 30, maximum: 60, minimum: 1 }),
+});
+
+/**
+ * Telegram delivery retry config.
+ */
+export const telegramDeliveryRetryConfigSchema = Type.Object({
+	attempts: Type.Number({ default: 3, minimum: 0 }),
+	jitter: Type.Number({ default: 0.2, maximum: 1, minimum: 0 }),
+	maxDelayMs: Type.Number({ default: 5000, minimum: 100 }),
+	minDelayMs: Type.Number({ default: 500, minimum: 0 }),
+});
+
+/**
+ * Telegram delivery config.
+ */
+export const telegramDeliveryConfigSchema = Type.Object({
+	linkPreview: Type.Boolean({ default: true }),
+	mediaMaxMb: Type.Number({ default: 5, minimum: 1 }),
+	parseMode: Type.Union([Type.Literal("html"), Type.Literal("plain")], { default: "html" }),
+	retry: telegramDeliveryRetryConfigSchema,
+	textChunkLimit: Type.Number({ default: 4000, minimum: 1 }),
+});
+
+/**
+ * Telegram stream rendering config.
+ */
+export const telegramStreamingConfigSchema = Type.Object({
+	mode: Type.Union(
+		[Type.Literal("off"), Type.Literal("partial"), Type.Literal("block"), Type.Literal("progress")],
+		{ default: "off" },
+	),
+	statusDebounceMs: Type.Number({ default: 1000, minimum: 0 }),
+});
+
+/**
+ * Per-topic override config for Telegram groups.
+ */
+export const telegramTopicConfigSchema = Type.Object({
+	groupPolicy: Type.Optional(
+		Type.Union([Type.Literal("open"), Type.Literal("allowlist"), Type.Literal("disabled")]),
+	),
+	requireMention: Type.Optional(Type.Boolean()),
+});
+
+/**
+ * Per-group override config for Telegram groups.
+ */
+export const telegramGroupConfigSchema = Type.Object({
+	groupPolicy: Type.Optional(
+		Type.Union([Type.Literal("open"), Type.Literal("allowlist"), Type.Literal("disabled")]),
+	),
+	requireMention: Type.Optional(Type.Boolean()),
+	topics: Type.Optional(Type.Record(Type.String(), telegramTopicConfigSchema)),
+});
+
+/**
+ * Telegram channel configuration.
+ */
+export const telegramChannelConfigSchema = Type.Object({
+	allowFrom: Type.Array(Type.String(), { default: [] }),
+	botToken: Type.Optional(Type.String()),
+	delivery: telegramDeliveryConfigSchema,
+	dmPolicy: Type.Union(
+		[
+			Type.Literal("pairing"),
+			Type.Literal("allowlist"),
+			Type.Literal("open"),
+			Type.Literal("disabled"),
+		],
+		{ default: "pairing" },
+	),
+	enabled: Type.Boolean({ default: false }),
+	groupAllowFrom: Type.Array(Type.String(), { default: [] }),
+	groupPolicy: Type.Union(
+		[Type.Literal("open"), Type.Literal("allowlist"), Type.Literal("disabled")],
+		{ default: "allowlist" },
+	),
+	groups: Type.Record(Type.String(), telegramGroupConfigSchema, { default: {} }),
+	inbound: telegramInboundConfigSchema,
+	mode: Type.Union([Type.Literal("polling"), Type.Literal("webhook")], { default: "polling" }),
+	polling: telegramPollingConfigSchema,
+	queue: channelQueueConfigSchema,
+	streaming: telegramStreamingConfigSchema,
+	webhookHost: Type.String({ default: "127.0.0.1" }),
+	webhookPath: Type.String({ default: "/agent_telegram_webhook" }),
+	webhookPort: Type.Number({ default: 8787, maximum: 65_535, minimum: 1 }),
+	webhookSecret: Type.Optional(Type.String({ minLength: 16 })),
+	webhookUrl: Type.Optional(Type.String()),
+});
+
+/**
+ * Channel configuration root.
+ */
+export const channelsConfigSchema = Type.Object({
+	telegram: telegramChannelConfigSchema,
+});
+
+/**
  * Root agent configuration schema.
  */
 export const agentConfigSchema = Type.Object({
+	channels: channelsConfigSchema,
 	compaction: compactionConfigSchema,
 	logging: loggingConfigSchema,
 	model: modelConfigSchema,

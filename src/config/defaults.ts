@@ -4,6 +4,48 @@ import type { AgentConfig } from "./schema.js";
  * Defaults for every optional configuration field.
  */
 export const defaultConfig: Omit<AgentConfig, "model"> = {
+	channels: {
+		telegram: {
+			allowFrom: [],
+			delivery: {
+				linkPreview: true,
+				mediaMaxMb: 5,
+				parseMode: "html",
+				retry: {
+					attempts: 3,
+					jitter: 0.2,
+					maxDelayMs: 5000,
+					minDelayMs: 500,
+				},
+				textChunkLimit: 4000,
+			},
+			dmPolicy: "pairing",
+			enabled: false,
+			groupAllowFrom: [],
+			groupPolicy: "allowlist",
+			groups: {},
+			inbound: {
+				allowedUpdates: ["message", "edited_message", "callback_query"],
+				dedupeTtlSeconds: 900,
+				ignoreBotMessages: true,
+			},
+			mode: "polling",
+			polling: {
+				timeoutSeconds: 30,
+			},
+			queue: {
+				maxPendingUpdatesGlobal: 5000,
+				maxPendingUpdatesPerConversation: 32,
+			},
+			streaming: {
+				mode: "off",
+				statusDebounceMs: 1000,
+			},
+			webhookHost: "127.0.0.1",
+			webhookPath: "/agent_telegram_webhook",
+			webhookPort: 8787,
+		},
+	},
 	compaction: {
 		enabled: true,
 		keepRecentTokens: 20_000,
@@ -33,6 +75,10 @@ export const defaultConfig: Omit<AgentConfig, "model"> = {
 	},
 	server: {
 		host: "127.0.0.1",
+		interactive: {
+			uiEnabled: false,
+			wsEnabled: false,
+		},
 		port: 8080,
 	},
 	systemPrompt: {

@@ -10,6 +10,7 @@ import {
 	type PreparedSystemPrompt,
 } from "./agent/index.js";
 import { resolveApiKey } from "./auth/index.js";
+import { startChannels, type RunningChannels } from "./channels/index.js";
 import { loadConfig, watchConfig, type AgentConfig } from "./config/index.js";
 import { loadCronJobs, CronService, type CronJobConfig } from "./cron/index.js";
 import { createLogger } from "./logging/index.js";
@@ -268,6 +269,7 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 	});
 	let preparedPrompt: PreparedSystemPrompt = prepareSystemPrompt([], [], [], state.config);
 	let runningServer: RunningServer | undefined;
+	let runningChannels: RunningChannels | undefined;
 	let activeCronJobs: Array<CronJobConfig> = [];
 
 	const deps = {
@@ -514,10 +516,52 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 	}
 
 	runningServer = await startServer(state.config, deps, { configProvider });
+	const startChannelsForCurrentState = async (): Promise<RunningChannels> => {
+		return await startChannels(
+			{
+				apiKeyResolver: resolveApiKey,
+				config: state.config,
+				logger,
+				model: state.model,
+				sessionManager,
+				systemPromptBuilder: deps.systemPromptBuilder,
+				toolRegistry: registry,
+			},
+			{
+				agentDir: paths.agentDir,
+			},
+		);
+	};
+	const restartChannels = async (reason: string): Promise<boolean> => {
+		const previousRuntime = runningChannels;
+		let candidateRuntime: RunningChannels | undefined;
+		try {
+			candidateRuntime = await startChannelsForCurrentState();
+			await previousRuntime?.close();
+			runningChannels = candidateRuntime;
+			logger.info("channels_restarted", { reason });
+			return true;
+		} catch (error: unknown) {
+			await candidateRuntime?.close().catch(() => {
+				return;
+			});
+			runningChannels = previousRuntime;
+			logger.error("channels_restart_failed", {
+				error: error instanceof Error ? error.message : String(error),
+				reason,
+			});
+			return false;
+		}
+	};
+	await restartChannels("startup");
 
-	const watchRoots = [paths.agentDir, paths.cronDir, paths.workflowsDir].filter((path) =>
-		existsSync(path),
-	);
+	const watchRoots = [
+		paths.configPath,
+		paths.toolsPath,
+		paths.cronJobsPath,
+		paths.cronDir,
+		paths.workflowsDir,
+	].filter((path, index, all) => existsSync(path) && all.indexOf(path) === index);
 	let reloadTimer: ReturnType<typeof setTimeout> | undefined;
 	let reloadChain: Promise<void> = Promise.resolve();
 	const watcher = watchConfig(watchRoots, ({ path, type }) => {
@@ -527,7 +571,10 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 		reloadTimer = setTimeout(() => {
 			reloadChain = reloadChain
 				.then(async () => {
-					await applyFromDisk(`${type}:${path}`);
+					const reloaded = await applyFromDisk(`${type}:${path}`);
+					if (reloaded) {
+						await restartChannels(`reload:${type}:${path}`);
+					}
 				})
 				.catch(() => {
 					return;
@@ -544,6 +591,8 @@ async function runServerMode(initialState: RuntimeState, paths: Paths): Promise<
 			return;
 		});
 		deps.cronService?.stop();
+		await runningChannels?.close();
+		runningChannels = undefined;
 		if (runningServer !== undefined) {
 			await runningServer.close();
 			runningServer = undefined;

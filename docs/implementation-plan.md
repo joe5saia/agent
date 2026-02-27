@@ -4,6 +4,9 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 
 ## Maintenance Updates
 
+- **2026-02-26:** Completed the full Telegram-first channel specification implementation: added transport module split (`polling`, `webhook`) with webhook secret verification and backpressure responses, extracted Telegram normalization/policy/delivery modules, added update watermark persistence and reload-safe channel restart fallback, introduced legacy web chat gating (`server.interactive.ui_enabled` and `server.interactive.ws_enabled`, both default `false`) for phase-based migration away from custom UI, and added Telegram-focused tests (normalize/policy/delivery/polling/webhook plus integration e2e). Verification: `npm run check` and `npm test`.
+- **2026-02-26:** Implemented the first Telegram channel delivery slice: added channel runtime contracts and bootstrap wiring (`src/channels/types.ts`, `src/channels/index.ts`, `src/index.ts`), durable conversation mapping and router (`src/channels/mapping-store.ts`, `src/channels/router.ts`), Telegram polling runtime with policy/dedupe/retry/stream-preview behavior (`src/channels/telegram/*`), and `channels.telegram` config schema/defaults/loader merge support. Added focused tests for router and mapping store plus config coverage updates. Verification: `npm run check`, `npm test`, and `npm test -- config channels-mapping-store channels-router`.
+- **2026-02-26:** Added `docs/spec-chat-channels.md`, a detailed Telegram-first channel-interface spec inspired by OpenClaw routing/runtime patterns, including deterministic channel routing, session key mapping, policy model, transport reliability, migration phases, and acceptance scenarios `S23.*` through `S26.*`. Updated `docs/README.md` index and added planned implementation tasks below.
 - **2026-02-26:** Added a hard guard that blocks generic `write`/`edit` tool mutations to `~/.agent/cron/jobs.yaml`, forcing cron changes through the dedicated validated `cron` tool. Implemented via protected-path validation options in `validatePath` and covered by `test/tools-read.test.ts`, `test/tools-edit.test.ts`, and `test/security.test.ts`. Verification: `npm run check` and `npm test`.
 - **2026-02-26:** Added a dedicated built-in `cron` management tool with structured actions (`list`, `get`, `upsert`, `delete`, `enable`, `disable`, `validate`) and safe persistence semantics (full-document validation plus atomic writes). Hardened cron config loading with duplicate-ID detection and schedule/timezone validation at parse time, and added focused tests in `test/tools-cron.test.ts` and `test/cron-loader.test.ts`. Verification: `npm run check` and `npm test -- cron-loader tools-cron tools.test cron.test api-cron.test`.
 - **2026-02-26:** Updated container/runtime privilege behavior so `sudo` is no longer hard-blocked by built-in command filtering (it can still be blocked via `security.blocked_commands`), and Docker runtime now installs/configures passwordless sudo for both `agent` and `node` users inside the container. Updated security/tooling specs and tests accordingly. Verification: `npm run check` and `npm test`.
@@ -37,6 +40,7 @@ Ordered build plan for the AI agent, derived from the spec documents. Each task 
 - [System Prompt & Observability](spec-system-prompt.md) — prompt assembly, logging, error handling
 - [Web Interface](spec-web-interface.md) — HTTP server, REST API, WebSocket
 - [Automation](spec-automation.md) — cron and workflows
+- [Chat Channels](spec-chat-channels.md) — channel abstraction, Telegram provider, and UI migration
 
 ---
 
@@ -165,6 +169,150 @@ migration window for compatibility aliases.
 - Run `npm test`.
 - Run focused tests while iterating: `npm test -- tools`, `npm test -- cron`, `npm test -- sessions`.
 - Merge only when all S6.1-S6.22 scenarios are covered by automated tests and green in CI.
+
+---
+
+## Planned Work: Channel Interface (Telegram-first)
+
+**Goal:** Replace the custom browser chat UI with a Telegram bot interface while preserving existing
+agent/tool/session behavior and setting a channel abstraction foundation for future providers.
+
+### Task C1 — Channel Abstraction + Core Contracts
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/channels/types.ts` (new)
+- `src/channels/index.ts` (new)
+- `src/channels/router.ts` (new)
+- `src/index.ts`
+- `test/channels/router.test.ts` (new)
+
+**Behavior:**
+
+- Define normalized inbound/outbound channel envelopes and runtime lifecycle contracts.
+- Add channel runtime bootstrap/start/stop wiring in process lifecycle.
+- Add deterministic `conversationKey` routing and `conversationKey -> sessionId` resolution path.
+
+**Acceptance criteria:** S23.1, S23.2, S23.3, S23.5, S26.2
+
+---
+
+### Task C2 — Conversation Mapping Store
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/channels/mapping-store.ts` (new)
+- `test/channels/mapping-store.test.ts` (new)
+
+**Behavior:**
+
+- Persist `conversationKey -> sessionId` mapping in durable local storage.
+- Provide atomic write semantics and restart-safe continuity.
+- Support deterministic lookup, upsert, and compaction-friendly record format.
+- Add corruption-tolerant load path (partial-line and invalid-record skip behavior).
+
+**Acceptance criteria:** S23.2, S23.3, S23.13, S23.14, S26.3, S26.6
+
+---
+
+### Task C3 — Telegram Provider Transport (Polling + Webhook)
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/channels/telegram/index.ts` (new)
+- `src/channels/telegram/polling.ts` (new)
+- `src/channels/telegram/webhook.ts` (new)
+- `test/channels-telegram-polling.test.ts` (new)
+- `test/channels-telegram-webhook.test.ts` (new)
+
+**Behavior:**
+
+- Implement Telegram long-polling mode as default.
+- Implement webhook mode with strict secret validation and startup preflight checks.
+- Add transport retry/backoff and graceful shutdown handling.
+- Honor Telegram `retry_after` on rate-limit responses.
+
+**Acceptance criteria:** S24.1, S24.2, S24.3, S24.15, S24.18, S24.22
+
+---
+
+### Task C4 — Telegram Normalization, Policy, and Delivery
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/channels/telegram/types.ts` (new)
+- `src/channels/telegram/normalize.ts` (new)
+- `src/channels/telegram/policy.ts` (new)
+- `src/channels/telegram/delivery.ts` (new)
+- `test/channels-telegram-normalize.test.ts` (new)
+- `test/channels-telegram-policy.test.ts` (new)
+- `test/channels-telegram-delivery.test.ts` (new)
+
+**Behavior:**
+
+- Normalize Telegram updates into channel envelopes with thread/topic-aware keys.
+- Enforce DM/group policy model and mention-gating behavior.
+- Implement streamed preview delivery, debounced status updates, chunking, and parse fallback.
+- Implement dedupe/update-watermark guardrails.
+- Handle edited/unsupported/bot-authored inbound updates deterministically without accidental runs.
+
+**Acceptance criteria:** S23.4, S23.6, S23.8, S23.11, S23.12, S23.15, S24.4-S24.14, S24.16, S24.17, S24.19, S24.20, S24.21, S24.23
+
+---
+
+### Task C5 — Configuration Schema + Defaults
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/config/schema.ts`
+- `src/config/defaults.ts`
+- `docs/spec-configuration.md`
+- `test/config.test.ts`
+
+**Behavior:**
+
+- Add `channels.telegram` configuration surface (transport, policy, streaming, delivery, retry).
+- Validate strict types and defaults for all channel config fields.
+- Document YAML snake_case keys and runtime mapping behavior.
+- Support safe runtime reload semantics with last-known-good fallback.
+
+**Acceptance criteria:** S26.1, S24.1, S24.2, S24.24, S24.25, S26.7
+
+---
+
+### Task C6 — Web UI Deprecation + Migration
+
+**Status:** Completed (2026-02-26)
+
+**Files to modify/create:**
+
+- `src/server/app.ts`
+- `src/server/ws.ts`
+- `public/*`
+- `docs/spec-web-interface.md`
+- `docs/deployment-guide.md`
+- `test/server.test.ts`
+- `test/ws.test.ts`
+- `test/integration/telegram-e2e.test.ts` (new)
+
+**Behavior:**
+
+- Added explicit legacy-mode gating: `server.interactive.ui_enabled` and `server.interactive.ws_enabled`.
+- Default runtime behavior is Telegram-first with custom web chat surfaces disabled.
+- Health and admin REST surfaces remain available regardless of legacy chat toggle state.
+- Preserved optional dual-run/operator fallback by enabling legacy UI/WS flags when required.
+
+**Acceptance criteria:** S25.1-S25.8, S26.4, S26.5
 
 ---
 

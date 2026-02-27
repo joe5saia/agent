@@ -65,6 +65,16 @@ security:
 server:
   host: 0.0.0.0
   port: 8080
+  interactive:
+    ui_enabled: false
+    ws_enabled: false
+
+channels:
+  telegram:
+    enabled: true
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    mode: polling
+    dm_policy: open
 ```
 
 ## 5. Operate the Container
@@ -82,7 +92,8 @@ docker compose down
 tailscale serve --bg https+insecure://127.0.0.1:8080
 ```
 
-Open the printed HTTPS URL and visit `/ui/`.
+Open the printed HTTPS URL. For legacy browser chat fallback, explicitly enable
+`server.interactive.ui_enabled=true` (and `ws_enabled=true`) and use `/agent`.
 
 ## 7. Hot-Reload Behavior
 

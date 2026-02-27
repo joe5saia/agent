@@ -45,4 +45,24 @@ describe("server app", () => {
 		expect(allowed.status).toBe(200);
 		expect(events.some((entry) => entry.event === "request_identity")).toBe(true);
 	});
+
+	it("S25.4: disables legacy UI routes by default and allows explicit opt-in", async () => {
+		const events: Array<{ event: string; fields?: Record<string, unknown> }> = [];
+		const app = createApp(createConfig(), createServerDeps(events));
+		const disabledResponse = await app.request("/agent");
+		expect(disabledResponse.status).toBe(404);
+
+		const enabledApp = createApp(
+			createConfig({
+				server: {
+					host: "127.0.0.1",
+					interactive: { uiEnabled: true },
+					port: 0,
+				},
+			}),
+			createServerDeps(events),
+		);
+		const enabledResponse = await enabledApp.request("/agent");
+		expect(enabledResponse.status).toBe(302);
+	});
 });

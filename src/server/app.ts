@@ -41,9 +41,22 @@ export function createApp(
 	app.use("*", identityMiddleware);
 	app.get(serverPaths.health, (context) => context.json({ ok: true }));
 
-	app.get(serverPaths.ui, (context) => context.redirect(`${serverPaths.ui}/`));
+	app.get(serverPaths.ui, (context) => {
+		const config = context.get("config");
+		if (!config.server.interactive.uiEnabled) {
+			return context.notFound();
+		}
+		return context.redirect(`${serverPaths.ui}/`);
+	});
 	app.use(
 		`${serverPaths.ui}/*`,
+		async (context, next) => {
+			const config = context.get("config");
+			if (!config.server.interactive.uiEnabled) {
+				return context.notFound();
+			}
+			await next();
+		},
 		serveStatic({
 			rewriteRequestPath: (path) => path.replace(/^\/agent\//, ""),
 			root: "./public",

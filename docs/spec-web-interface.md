@@ -2,6 +2,10 @@
 
 HTTP server, REST API, WebSocket protocol, and the Hono web framework.
 
+> **Status (2026-02-26):** The custom browser chat UI and WebSocket chat protocol are now legacy,
+> disabled by default, and kept only for controlled dual-run/operator fallback. Telegram is the
+> primary interactive interface. Health and admin REST APIs remain active.
+
 **Related documents:**
 
 - [Agent Loop & Tools](spec-agent-loop.md) — agent execution streamed via WebSocket
@@ -15,13 +19,14 @@ HTTP server, REST API, WebSocket protocol, and the Hono web framework.
 
 ## 10. Web Interface
 
-A lightweight web application provides the chat interface. It runs on the VM and is accessible only within the Tailscale network.
+A lightweight web application previously provided the default chat interface. It now runs in
+legacy mode only when explicitly enabled.
 
 ### 10.1 Architecture
 
-- **HTTP server** — serves the web UI static files and provides a REST API for session management.
-- **WebSocket** — provides real-time streaming of agent responses to the browser.
-- **Static UI** — minimal chat interface (HTML/CSS/JS or lightweight framework).
+- **HTTP server** — serves health/admin REST APIs.
+- **Legacy static UI** — optional operator surface, disabled by default.
+- **Legacy WebSocket** — optional chat stream transport, disabled by default.
 
 ### 10.2 REST API
 

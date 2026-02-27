@@ -51,6 +51,10 @@ export async function startServer(
 	});
 
 	httpServer.on("upgrade", (request, socket) => {
+		if (!resolveConfig().server.interactive.wsEnabled) {
+			socket.destroy();
+			return;
+		}
 		if (!ws.attachUpgradeHandler(request, socket)) {
 			socket.destroy();
 		}
