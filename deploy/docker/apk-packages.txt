@@ -1,0 +1,7 @@
+# One package name per line.
+# These packages are installed into the image at build time.
+# The runtime copy lives at ~/.agent/container/apk-packages.txt.
+#
+# Example:
+# ripgrep
+# git

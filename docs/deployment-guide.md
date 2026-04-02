@@ -77,7 +77,28 @@ channels:
     dm_policy: open
 ```
 
-## 5. Operate the Container
+## 5. Persistent App Installs
+
+This repository supports a two-layer package workflow:
+
+- `deploy/docker/apk-packages.txt` defines packages installed at image build time.
+- `~/.agent/container/apk-packages.txt` is persisted runtime state and is auto-applied on startup.
+
+Install packages persistently from inside the running container by appending to the runtime file:
+
+```bash
+docker compose exec agent sh -lc 'echo "ripgrep" >> ~/.agent/container/apk-packages.txt'
+docker compose restart agent
+```
+
+Promote runtime package changes into the image manifest and rebuild:
+
+```bash
+./scripts/sync-runtime-apk-packages.sh
+docker compose --env-file deploy/docker/.env up -d --build
+```
+
+## 6. Operate the Container
 
 ```bash
 docker compose ps
@@ -86,7 +107,7 @@ docker compose restart agent
 docker compose down
 ```
 
-## 6. Expose Over Tailscale (Optional)
+## 7. Expose Over Tailscale (Optional)
 
 ```bash
 tailscale serve --bg https+insecure://127.0.0.1:8080
@@ -95,7 +116,7 @@ tailscale serve --bg https+insecure://127.0.0.1:8080
 Open the printed HTTPS URL. For legacy browser chat fallback, explicitly enable
 `server.interactive.ui_enabled=true` (and `ws_enabled=true`) and use `/agent`.
 
-## 7. Hot-Reload Behavior
+## 8. Hot-Reload Behavior
 
 - Runtime reload watches:
   - `~/.agent/config.yaml`
@@ -104,7 +125,7 @@ Open the printed HTTPS URL. For legacy browser chat fallback, explicitly enable
   - `~/.agent/workflows/*.yaml`
 - Invalid reloads are logged and ignored; the previous runtime state remains active.
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 - Container fails to start:
   - `docker compose logs agent` and fix config validation errors.
@@ -113,7 +134,7 @@ Open the printed HTTPS URL. For legacy browser chat fallback, explicitly enable
 - No model responses:
   - Confirm credentials in `deploy/docker/.env`.
 
-## 9. Optional systemd Host Wrapper
+## 10. Optional systemd Host Wrapper
 
 If you want systemd-level startup for Docker itself, install a wrapper unit:
 

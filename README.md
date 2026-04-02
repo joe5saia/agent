@@ -47,9 +47,29 @@ docker compose up -d --build
 open http://127.0.0.1:8080/ui/
 ```
 
-The container persists runtime state in a named volume at `/home/agent/.agent`.
+The container persists runtime state in the host-mounted path at `/home/agent/.agent`.
 Set API credentials in `deploy/docker/.env` (copy from `deploy/docker/.env.example`).
 The image configures passwordless `sudo` for both `agent` and `node` users inside the container.
+
+### Persistent app installs in Docker
+
+- Image-level packages are declared in `deploy/docker/apk-packages.txt`.
+- Runtime package state is persisted at `~/.agent/container/apk-packages.txt` on the host mount.
+- On startup, entrypoint installs any missing packages from the runtime package file.
+
+Install a package from inside the running container:
+
+```bash
+docker compose exec agent sh -lc 'echo "ripgrep" >> ~/.agent/container/apk-packages.txt'
+docker compose restart agent
+```
+
+Promote runtime installs into the image and rebuild:
+
+```bash
+./scripts/sync-runtime-apk-packages.sh
+docker compose up -d --build
+```
 
 ## Development
 
